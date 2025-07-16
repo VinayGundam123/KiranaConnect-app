@@ -1,20 +1,20 @@
 import axios from 'axios';
 import { useRouter } from 'expo-router';
 import {
-    ArrowRight,
-    Clock,
-    Star,
-    Store,
-    Truck,
-    Users
+  ArrowRight,
+  Clock,
+  Star,
+  Store,
+  Truck,
+  Users
 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
-    Image,
-    ScrollView,
-    StyleSheet,
-    TouchableOpacity,
-    View
+  Image,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
@@ -115,8 +115,24 @@ export default function Home() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleWishlistToggle = (item: any) => {
-    showToast(`${item.name} updated in wishlist`);
+  const handleWishlistToggle = async (item: any) => {
+    try {
+      if (isInWishlist(item._id)) {
+        await removeFromWishlist(item._id);
+        showToast(`${item.name} removed from wishlist`);
+      } else {
+        await addToWishlist({
+          ...item,
+          itemId: item._id,
+          storeId: item.storeId,
+          storeName: item.storeName,
+        });
+        showToast(`${item.name} added to wishlist`);
+      }
+    } catch (err) {
+      console.error('Failed to update wishlist:', err);
+      showToast('Failed to update wishlist');
+    }
   };
 
   const handleAddToCart = (item: any) => {
@@ -224,8 +240,10 @@ export default function Home() {
               <View key={item._id} style={styles.gridItem}>
                 <ProductCard
                   product={item}
-                  onWishlistToggle={handleWishlistToggle}
-                  onAddToCart={handleAddToCart}
+                  onWishlistToggle={() => handleWishlistToggle(item)}
+                  onAddToCart={() => handleAddToCart(item)}
+                  onPress={() => handleProductPress(item._id)}
+                  isInWishlist={isInWishlist(item._id)}
                 />
               </View>
             ))}

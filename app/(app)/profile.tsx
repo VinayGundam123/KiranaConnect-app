@@ -13,13 +13,13 @@ const profileOptions = [
     title: 'My Orders',
     description: 'View your order history',
     icon: ShoppingBag,
-    route: '/orders',
+    route: '/(app)/orders',
   },
   {
     title: 'Wishlist',
     description: 'Your saved items',
     icon: Heart,
-    route: '/wishlist',
+    route: '/(app)/wishlist',
   },
   {
     title: 'Settings',
@@ -31,7 +31,7 @@ const profileOptions = [
     title: 'Help & Support',
     description: 'Get help and contact us',
     icon: HelpCircle,
-    route: '/help',
+    route: '/(app)/help-support',
   },
 ];
 
@@ -50,7 +50,7 @@ export default function Profile() {
   return (
     <SafeAreaView>
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-        {/* Header */}
+        {/* Profile Info */}
         <View style={styles.header}>
           <View style={styles.profileInfo}>
             <View style={styles.avatar}>

@@ -10,7 +10,9 @@ import React, {
     useState,
 } from 'react';
 import 'react-native-reanimated';
+import Toast from 'react-native-toast-message';
 import { authManager, getCurrentSession } from '../lib/auth';
+import { DataProvider } from '../lib/data-context';
 
 // Wishlist Context Implementation
 export interface WishlistItem {
@@ -179,11 +181,14 @@ export default function RootLayout() {
   }
 
   return (
-    <Stack>
-      <Stack.Screen name="(app)" options={{ headerShown: false }} />
-      <Stack.Screen name="auth" options={{ presentation: 'modal', headerShown: false }} />
-      <Stack.Screen name="seller" options={{ headerShown: false }} />
-      <Stack.Screen name="+not-found" />
-    </Stack>
+    <DataProvider>
+      <Stack>
+        <Stack.Screen name="(app)" options={{ headerShown: false }} />
+        <Stack.Screen name="auth" options={{ presentation: 'modal', headerShown: false }} />
+        <Stack.Screen name="seller" options={{ headerShown: false }} />
+        <Stack.Screen name="+not-found" />
+      </Stack>
+      <Toast />
+    </DataProvider>
   );
 }

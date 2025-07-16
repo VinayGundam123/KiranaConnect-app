@@ -1,25 +1,23 @@
 import { useRouter } from 'expo-router';
-import { ArrowLeft } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
-  ActivityIndicator,
-  FlatList,
-  StyleSheet,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    FlatList,
+    StyleSheet,
+    View,
 } from 'react-native';
 import { SafeAreaView } from '../../../components/ui/safe-area-view';
 import { Text } from '../../../components/ui/text';
+import { useCart } from '../../../lib/cart';
 import { useProducts } from '../../../lib/hooks';
 import { theme } from '../../../lib/theme';
 import { useWishlist } from '../../_layout';
 import { ProductCard } from '../../components/ui/product-card';
-import { useCart } from '../_layout';
 
-const PopularItemsScreen = () => {
+export default function PopularItemsScreen() {
   const router = useRouter();
   const { data, loading, error } = useProducts({ sortBy: 'popularity' });
-  const { addToWishlist, isInWishlist } = useWishlist();
+  const { addToWishlist, isInWishlist, removeFromWishlist } = useWishlist();
   const { addToCart } = useCart();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -40,10 +38,24 @@ const PopularItemsScreen = () => {
     }
   };
 
-  const handleWishlistToggle = (product: any) => {
-    // This function needs the full logic from the index page
-    // For now, just showing a toast
-    showToast(`${product.name} updated in wishlist`);
+  const handleWishlistToggle = async (product: any) => {
+    try {
+      if (isInWishlist(product._id)) {
+        await removeFromWishlist(product._id);
+        showToast(`${product.name} removed from wishlist`);
+      } else {
+        await addToWishlist({
+          ...product,
+          itemId: product._id,
+          storeId: product.storeId,
+          storeName: product.storeName,
+        });
+        showToast(`${product.name} added to wishlist`);
+      }
+    } catch (err) {
+      console.error('Failed to update wishlist:', err);
+      showToast('Failed to update wishlist');
+    }
   };
 
   const products = data?.products || [];
@@ -52,8 +64,10 @@ const PopularItemsScreen = () => {
     <View style={styles.itemWrapper}>
       <ProductCard
         product={item}
-        onWishlistToggle={handleWishlistToggle}
-        onAddToCart={handleAddToCart}
+        onWishlistToggle={() => handleWishlistToggle(item)}
+        onAddToCart={() => handleAddToCart(item)}
+        onPress={() => router.push(`/(app)/products/${item._id}`)}
+        isInWishlist={isInWishlist(item._id)}
       />
     </View>
   );
@@ -71,13 +85,6 @@ const PopularItemsScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="black" />
-        </TouchableOpacity>
-        <Text variant="h2">Popular Items</Text>
-        <View style={{ width: 24 }} />
-      </View>
       <Text style={styles.subtitle}>Discover trending products from top stores</Text>
       
       <FlatList
@@ -103,18 +110,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors?.gray?.[50] || '#F9FAFB',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: theme.spacing?.lg || 16,
-    backgroundColor: theme.colors?.white || '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors?.gray?.[200] || '#E5E7EB',
-  },
-  backButton: {
-    padding: 8,
   },
   subtitle: {
     textAlign: 'center',

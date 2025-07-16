@@ -1,6 +1,5 @@
 import { useRouter } from 'expo-router';
 import {
-  ArrowLeft,
   Heart,
   ShoppingCart,
   Store,
@@ -9,7 +8,6 @@ import {
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Image,
   StyleSheet,
@@ -20,28 +18,66 @@ import {
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { SafeAreaView } from '../../components/ui/safe-area-view';
+import { useCart } from '../../lib/cart';
 import { useWishlist, WishlistItem } from '../_layout';
 
-// Mock add to cart function for now
-const handleAddToCart = (item: WishlistItem) => {
-  Alert.alert('Added to Cart', `${item.name} has been added to your cart.`);
+// Custom Toast Component
+const Toast = ({ visible, message, type, onHide }: {
+  visible: boolean;
+  message: string;
+  type: 'success' | 'error';
+  onHide: () => void;
+}) => {
+  React.useEffect(() => {
+    if (visible) {
+      const timer = setTimeout(() => {
+        onHide();
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [visible, onHide]);
+
+  if (!visible) return null;
+
+  return (
+    <View style={[
+      styles.toastContainer,
+      type === 'success' ? styles.successToast : styles.errorToast
+    ]}>
+      <Text style={styles.toastText}>{message}</Text>
+    </View>
+  );
 };
 
 export default function WishlistScreen() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'success' as 'success' | 'error' });
+
   const {
     items: wishlistItems,
     removeFromWishlist,
     loading,
   } = useWishlist();
+  const { addToCart } = useCart();
 
-  const showToast = (message: string) => {
-    setToastMessage(message);
-    setTimeout(() => {
-      setToastMessage(null);
-    }, 2000);
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ visible: true, message, type });
+  };
+
+  const hideToast = () => {
+    setToast({ ...toast, visible: false });
+  };
+
+  const handleAddToCart = async (item: WishlistItem) => {
+    try {
+      await addToCart(item, 1);
+      await removeFromWishlist(item.itemId);
+      showToast(`${item.name} moved to cart.`, 'success');
+    } catch (error) {
+      console.error('Failed to move item to cart:', error);
+      showToast('Failed to move item. Please try again.', 'error');
+    }
   };
 
   const filteredItems = wishlistItems.filter(
@@ -50,15 +86,20 @@ export default function WishlistScreen() {
       item.storeName.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleRemoveFromWishlist = (itemId: string) => {
-    removeFromWishlist(itemId);
-    showToast('Item removed from your wishlist.');
+  const handleRemoveFromWishlist = async (itemId: string, name: string) => {
+    try {
+      await removeFromWishlist(itemId);
+      showToast(`${name} removed from wishlist.`, 'success');
+    } catch (error) {
+      console.error('Failed to remove item from wishlist:', error);
+      showToast('Failed to remove item. Please try again.', 'error');
+    }
   };
 
   const renderWishlistItem = ({ item }: { item: WishlistItem }) => (
     <View style={styles.itemContainer}>
       <TouchableOpacity
-        onPress={() => router.push(`/products/${item._id}` as any)}
+        onPress={() => router.push(`/(app)/products/${item.itemId}`)}
       >
         <Image
           source={{ uri: item.image || 'https://via.placeholder.com/300' }}
@@ -76,14 +117,14 @@ export default function WishlistScreen() {
           <Button
             size="sm"
             variant="outline"
-            onPress={() => handleRemoveFromWishlist(item.itemId)}
+            onPress={() => handleRemoveFromWishlist(item.itemId, item.name)}
           >
             <Trash2 size={16} color="red" />
           </Button>
           <Button
             size="sm"
             variant="outline"
-            onPress={() => router.push(`/stores/${item.storeId}` as any)}
+            onPress={() => router.push(`/(app)/stores/${item.storeId}`)}
           >
             <Store size={16} color="gray" />
           </Button>
@@ -104,14 +145,6 @@ export default function WishlistScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <ArrowLeft size={24} color="black" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Wishlist</Text>
-        <View style={{ width: 24 }} />
-      </View>
-
       <View style={styles.searchContainer}>
         <Input
           placeholder="Search in wishlist..."
@@ -134,33 +167,25 @@ export default function WishlistScreen() {
           <Text style={styles.emptySubText}>
             Tap the heart on any product to save it here.
           </Text>
-          <Button onPress={() => router.push('/' as any)}>
+          <Button onPress={() => router.push('/')}>
             Browse Products
           </Button>
         </View>
       )}
-      {toastMessage && (
-        <View style={styles.toastContainer}>
-          <Text style={styles.toastText}>{toastMessage}</Text>
-        </View>
-      )}
+      <Toast
+        visible={toast.visible}
+        message={toast.message}
+        type={toast.type}
+        onHide={hideToast}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F9FAFB' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  headerTitle: { fontSize: 20, fontWeight: 'bold' },
   searchContainer: { padding: 16 },
-  listContainer: { paddingHorizontal: 16 },
+  listContainer: { paddingHorizontal: 16, paddingBottom: 20 },
   itemContainer: {
     flexDirection: 'row',
     padding: 12,
@@ -197,13 +222,29 @@ const styles = StyleSheet.create({
     bottom: 30,
     left: 20,
     right: 20,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    borderRadius: 20,
-    padding: 15,
+    borderRadius: 12,
+    padding: 16,
     alignItems: 'center',
-    justifyContent: 'center',
+    zIndex: 1000,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  successToast: {
+    backgroundColor: '#10B981',
+  },
+  errorToast: {
+    backgroundColor: '#EF4444',
   },
   toastText: {
     color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 }); 

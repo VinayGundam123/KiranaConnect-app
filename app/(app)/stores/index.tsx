@@ -1,7 +1,6 @@
 import { useRouter } from 'expo-router';
-import { ArrowLeft } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
 import { useStores } from '../../../lib/hooks';
 import { StoreCard } from '../../components/dashboard/StoreCard';
 import { Button } from '../../components/ui/button';
@@ -39,20 +38,6 @@ export default function AllStoresScreen() {
 
   const renderHeader = () => (
     <View style={styles.headerContainer}>
-      {/* Back Button and Title Section */}
-      <View style={styles.headerTopRow}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <View style={styles.titleSection}>
-          <Text variant="h4" style={styles.title}>All Stores</Text>
-          <Text style={styles.subtitle}>Discover local stores near you</Text>
-        </View>
-      </View>
-      
       <Input
         placeholder="Search stores..."
         value={searchQuery}
@@ -160,29 +145,6 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E5E7EB',
     marginBottom: 8,
   },
-  headerTopRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-  },
-  backButton: {
-    padding: 8,
-    marginRight: 12,
-    marginTop: -4, // Align with title
-  },
-  titleSection: {
-    flex: 1,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#6B7280',
-  },
   searchInput: {
     marginBottom: 16,
   },
@@ -203,6 +165,8 @@ const styles = StyleSheet.create({
   storeItemContainer: {
     paddingHorizontal: 16,
     marginBottom: 8,
+    alignItems: 'center', // Center the store cards
+    justifyContent: 'center', // Center the store cards
   },
   loadingContainer: {
     flex: 1,
@@ -211,28 +175,29 @@ const styles = StyleSheet.create({
     padding: 32,
   },
   loadingText: {
-    marginTop: 8,
+    marginTop: 12,
     fontSize: 16,
     color: '#6B7280',
   },
   errorText: {
     fontSize: 16,
-    color: '#DC2626',
+    color: '#EF4444',
     textAlign: 'center',
   },
   emptyContainer: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 48,
+    padding: 32,
   },
   emptyTitle: {
-    fontSize: 16,
-    fontWeight: '500',
+    fontSize: 20,
+    fontWeight: '600',
     color: '#111827',
-    marginBottom: 4,
+    marginBottom: 8,
   },
   emptySubtitle: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#6B7280',
     textAlign: 'center',
   },

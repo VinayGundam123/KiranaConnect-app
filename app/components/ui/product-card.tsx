@@ -1,131 +1,121 @@
-import { useRouter } from 'expo-router';
-import { Heart } from 'lucide-react-native';
+import { Heart, ShoppingCart } from 'lucide-react-native';
 import React from 'react';
-import {
-  Image,
-  StyleSheet,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { useWishlist } from '../../_layout';
-import { Button } from './button';
-import { Card } from './card';
-import { Text } from './text';
+import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-export interface ProductCardProps {
-  product: {
-    _id: string;
-    name: string;
-    price: number;
-    image?: string;
-    storeName: string;
-    storeId: string;
-    category?: string;
-    unit?: string;
-  };
-  onWishlistToggle?: (product: any) => void;
-  onAddToCart?: (product: any) => void;
-  variant?: 'default' | 'compact';
+// Theme object with proper color definitions
+const theme = {
+  colors: {
+    white: '#FFFFFF',
+    primary: {
+      600: '#4F46E5',
+    },
+    gray: {
+      400: '#9CA3AF',
+      500: '#6B7280',
+      800: '#1F2937',
+      600: '#4B5563',
+    },
+    red: {
+      50: '#FEF2F2',
+      500: '#EF4444',
+    },
+  },
+};
+
+interface Product {
+  _id: string;
+  name: string;
+  price: number;
+  unit: string;
+  category: string;
+  image?: string;
+  image_url?: string;
+  storeName?: string;
+  storeId?: string;
 }
 
-export function ProductCard({
+interface ProductCardProps {
+  product: Product;
+  onAddToCart: () => void;
+  onWishlistToggle: () => void;
+  isInWishlist?: boolean;
+  onPress?: () => void; // Add optional onPress callback
+}
+
+export const ProductCard: React.FC<ProductCardProps> = ({
   product,
-  onWishlistToggle,
   onAddToCart,
-  variant = 'default',
-}: ProductCardProps) {
-  const router = useRouter();
-  const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
-
-  const handleWishlistToggle = () => {
-    if (isInWishlist(product._id)) {
-      removeFromWishlist(product._id);
-    } else {
-      addToWishlist({
-        itemId: product._id,
-        name: product.name,
-        price: product.price,
-        image: product.image || '',
-        unit: product.unit || 'piece',
-        storeName: product.storeName,
-        storeId: product.storeId,
-        category: product.category || 'General',
-      });
-    }
-    onWishlistToggle?.(product);
-  };
-
-  const handleProductPress = () => {
-    router.push(`/products/${product._id}` as any);
-  };
-
-  const handleAddToCart = () => {
-    onAddToCart?.(product);
-  };
-
+  onWishlistToggle,
+  isInWishlist = false,
+  onPress, // Add onPress to destructured props
+}) => {
   return (
-    <Card style={styles.card}>
-      <TouchableOpacity onPress={handleProductPress}>
-        <View style={styles.imageContainer}>
-          <Image
-            source={{
-              uri: product.image || 'https://via.placeholder.com/300x300?text=No+Image',
-            }}
-            style={styles.image}
-          />
-        </View>
-        
-        <View style={styles.content}>
-          <Text style={styles.productName} numberOfLines={2}>
-            {product.name}
-          </Text>
-          <Text style={styles.productUnit}>
-            {product.unit || 'piece'}
-          </Text>
-          <Text style={styles.price}>
-            ₹{product.price}
-          </Text>
-        </View>
-      </TouchableOpacity>
+    <TouchableOpacity 
+      style={styles.container}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <Image
+        source={{
+          uri: product.image || product.image_url || 'https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?w=300'
+        }}
+        style={styles.image}
+      />
       
-      <View style={styles.footer}>
-        <View style={styles.bottomRow}>
+      <View style={styles.content}>
+        <Text style={styles.name} numberOfLines={2}>
+          {product.name}
+        </Text>
+        
+        <Text style={styles.price}>
+          ₹{product.price}/{product.unit}
+        </Text>
+        
+        {product.storeName && (
+          <Text style={styles.storeName} numberOfLines={1}>
+            {product.storeName}
+          </Text>
+        )}
+
+        <Text style={styles.category}>
+          {product.category}
+        </Text>
+        
+        <View style={styles.actions}>
           <TouchableOpacity
-            style={styles.wishlistButton}
-            onPress={handleWishlistToggle}
+            style={[styles.wishlistButton, isInWishlist && styles.wishlistButtonActive]}
+            onPress={(e) => {
+              e.stopPropagation(); // Prevent triggering card onPress
+              onWishlistToggle();
+            }}
           >
-            <Heart
-              color={
-                isInWishlist(product._id)
-                  ? '#EF4444' 
-                  : '#9CA3AF'
-              }
-              fill={
-                isInWishlist(product._id)
-                  ? '#EF4444'
-                  : 'none'
-              }
-              size={20}
+            <Heart 
+              size={16} 
+              color={isInWishlist ? theme.colors.red[500] : theme.colors.gray[400]}
+              fill={isInWishlist ? theme.colors.red[500] : 'none'}
             />
           </TouchableOpacity>
-          <Button
-            style={styles.addToCartButton}
-            onPress={handleAddToCart}
+          
+          <TouchableOpacity 
+            style={styles.addButton} 
+            onPress={(e) => {
+              e.stopPropagation(); // Prevent triggering card onPress
+              onAddToCart();
+            }}
           >
-            <Text style={styles.addToCartText}>Add</Text>
-          </Button>
+            <ShoppingCart size={14} color={theme.colors.white} />
+            <Text style={styles.addButtonText}>Add</Text>
+          </TouchableOpacity>
         </View>
       </View>
-    </Card>
+    </TouchableOpacity>
   );
-}
+};
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: '#FFFFFF',
+  container: {
+    backgroundColor: theme.colors.white,
     borderRadius: 12,
-    marginHorizontal: 6,
-    marginVertical: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -133,74 +123,61 @@ const styles = StyleSheet.create({
     elevation: 3,
     overflow: 'hidden',
   },
-  imageContainer: {
-    position: 'relative',
-    height: 120,
-    backgroundColor: '#F8F9FA',
-  },
   image: {
     width: '100%',
-    height: '100%',
-    resizeMode: 'contain',
+    height: 120,
   },
   content: {
     padding: 12,
-    minHeight: 80,
   },
-  productName: {
+  name: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1F2937',
+    color: theme.colors.gray[800],
     marginBottom: 4,
-    lineHeight: 18,
-  },
-  productUnit: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginBottom: 8,
   },
   price: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#1F2937',
+    color: theme.colors.primary[600],
+    marginBottom: 4,
   },
-  footer: {
-    paddingHorizontal: 12,
-    paddingBottom: 12,
+  storeName: {
+    fontSize: 12,
+    color: theme.colors.gray[600],
+    marginBottom: 4,
   },
-  bottomRow: {
+  category: {
+    fontSize: 12,
+    color: theme.colors.gray[500],
+    marginBottom: 8,
+  },
+  actions: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 8,
   },
   wishlistButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  addToCartButton: {
-    backgroundColor: '#0EA5E9',
+    padding: 6,
     borderRadius: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+  },
+  wishlistButtonActive: {
+    backgroundColor: theme.colors.red[50],
+  },
+  addButton: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    flex: 1,
-    marginLeft: 8,
+    backgroundColor: theme.colors.primary[600],
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    gap: 4,
   },
-  addToCartText: {
-    color: '#FFFFFF',
-    fontSize: 14,
+  addButtonText: {
+    color: theme.colors.white,
+    fontSize: 12,
     fontWeight: '600',
   },
 }); 

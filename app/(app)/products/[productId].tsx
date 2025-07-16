@@ -1,21 +1,25 @@
 import axios from 'axios';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { Heart, ShoppingCart } from 'lucide-react-native';
+import { Link, Stack, useLocalSearchParams } from 'expo-router';
+import { Heart, Share2, ShoppingCart, Star } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Image,
+  Text as NativeText,
   ScrollView,
+  Share,
   StyleSheet,
-  Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Button } from '../../../components/ui/button';
+import { SafeAreaView } from '../../../components/ui/safe-area-view';
+import { Text } from '../../../components/ui/text';
+import { useCart } from '../../../lib/cart';
+import { theme } from '../../../lib/theme';
 import { useWishlist } from '../../_layout';
-import { Button } from '../../components/ui/button';
-import { SafeAreaView } from '../../components/ui/safe-area-view';
 
+// Interfaces based on your ProductDetailPage.tsx
 interface Product {
   _id: string;
   name: string;
@@ -29,6 +33,7 @@ interface Product {
   sellerName: string;
   sellerAddress: string;
   sellerLicense: string;
+  // Placeholder fields
   refundPolicy: string;
   customerCare: string;
   nutritionInfo: string;
@@ -42,8 +47,7 @@ interface SimilarProduct {
   storeName: string;
 }
 
-export default function ProductDetailPage() {
-  const router = useRouter();
+export default function ProductDetailScreen() {
   const { productId } = useLocalSearchParams<{ productId: string }>();
   const [product, setProduct] = useState<Product | null>(null);
   const [similarProducts, setSimilarProducts] = useState<SimilarProduct[]>([]);
@@ -52,15 +56,16 @@ export default function ProductDetailPage() {
   const [selectedImage, setSelectedImage] = useState<string>('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  const { addToCart } = useCart();
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
 
   const showToast = (message: string) => {
     setToastMessage(message);
     setTimeout(() => {
       setToastMessage(null);
-    }, 2000); // Hide after 2 seconds
+    }, 2500);
   };
-
+  
   useEffect(() => {
     const fetchProductDetails = async () => {
       if (!productId) {
@@ -68,68 +73,67 @@ export default function ProductDetailPage() {
         setLoading(false);
         return;
       }
+      
+      console.log('🔍 Fetching product with ID:', productId);
       setLoading(true);
       setError(null);
+      
       try {
         const response = await axios.get(
           `https://vigorously-more-impala.ngrok-free.app/buyer/products/${productId}`,
-          {
-            headers: {
-              'ngrok-skip-browser-warning': 'true',
-            },
-          }
+          { headers: { 'ngrok-skip-browser-warning': 'true' } }
         );
-        const productData = response.data.product;
-
-        if (!productData) {
+        
+        console.log('📡 API Response Status:', response.status);
+        console.log('📦 API Response Data:', JSON.stringify(response.data, null, 2));
+        
+        if (!response.data) {
+          console.error('❌ No data in response');
           setError('Product data not found in API response.');
-          setLoading(false);
           return;
         }
-
+        
+        // Check if response.data has the product or if response.data IS the product
+        const productData = response.data.product || response.data;
+        
+        if (!productData || !productData._id) {
+          console.error('❌ No product data or missing _id:', productData);
+          setError('Product data not found in API response.');
+          return;
+        }
+        
+        console.log('✅ Product data found:', productData);
+        
         const completeProductData: Product = {
           ...productData,
-          images:
-            productData.images && productData.images.length > 0
-              ? productData.images
-              : ['https://via.placeholder.com/600x600?text=No+Image'],
-          nutritionInfo:
-            'Energy (kcal) 76.6, Protein (g) 2.5, Carbohydrate (g) 12.6, Sugar (g) 8.4, Sodium (mg) 28.9, Fat (g) 1.9',
-          customerCare:
-            'In case of any issue, contact us E-mail address:\nsupport@sparsoft.com',
-          refundPolicy: 'Refunds/complaints window is 12 hrs',
+          images: productData.images?.length > 0 ? productData.images : ['https://via.placeholder.com/600x600?text=No+Image'],
+          nutritionInfo: 'Energy (kcal) 76.6, Protein (g) 2.5, ...',
+          customerCare: 'Email: support@sparsoft.com',
+          refundPolicy: 'Refunds available within 12 hours of delivery.',
         };
+        
+        console.log('✅ Complete product data:', completeProductData);
         setProduct(completeProductData);
         setSelectedImage(completeProductData.images[0]);
+        
         if (completeProductData.category) {
-          fetchSimilarProducts(
-            completeProductData.category,
-            completeProductData._id
-          );
+          fetchSimilarProducts(completeProductData.category, completeProductData._id);
         }
       } catch (err: any) {
-        console.error('Failed to fetch product details:', err);
-        const errorMessage =
-          err.response?.data?.error ||
-          'Failed to load product details. Please try again.';
+        console.error('❌ Error fetching product:', err);
+        console.error('❌ Error response:', err.response?.data);
+        const errorMessage = err.response?.data?.error || 'Failed to load product details.';
         setError(errorMessage);
       } finally {
         setLoading(false);
       }
     };
 
-    const fetchSimilarProducts = async (
-      category: string,
-      currentProductId: string
-    ) => {
+    const fetchSimilarProducts = async (category: string, currentProductId: string) => {
       try {
         const response = await axios.get(
           `https://vigorously-more-impala.ngrok-free.app/buyer/products?category=${category}&limit=5`,
-          {
-            headers: {
-              'ngrok-skip-browser-warning': 'true',
-            },
-          }
+          { headers: { 'ngrok-skip-browser-warning': 'true' } }
         );
         if (response.data.products) {
           const mappedProducts = response.data.products
@@ -138,8 +142,7 @@ export default function ProductDetailPage() {
               _id: p._id,
               name: p.name,
               price: p.price,
-              image:
-                p.image_url || 'https://via.placeholder.com/300x300?text=No+Image',
+              image: p.image_url || 'https://via.placeholder.com/300x300',
               storeName: p.storeName,
             }));
           setSimilarProducts(mappedProducts);
@@ -152,196 +155,141 @@ export default function ProductDetailPage() {
     fetchProductDetails();
   }, [productId]);
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     if (!product) return;
-    Alert.alert('Success', `${product.name} added to cart`);
+    try {
+      await addToCart(product, 1);
+      showToast(`${product.name} added to cart`);
+    } catch (err) {
+      showToast('Failed to add item to cart');
+    }
   };
 
-  const handleWishlistToggle = () => {
+  const handleWishlistToggle = async () => {
     if (!product) return;
+    try {
+      if (isInWishlist(product._id)) {
+        await removeFromWishlist(product._id);
+        showToast('Removed from wishlist');
+      } else {
+        await addToWishlist({ ...product, itemId: product._id });
+        showToast('Added to wishlist');
+      }
+    } catch (err) {
+      showToast('Failed to update wishlist');
+    }
+  };
 
-    if (isInWishlist(product._id)) {
-      removeFromWishlist(product._id);
-      showToast('Removed from wishlist');
-    } else {
-      addToWishlist({
-        itemId: product._id,
-        name: product.name,
-        price: product.price,
-        image: product.images[0],
-        unit: product.unit,
-        storeName: product.storeName,
-        storeId: product.storeId,
-        category: product.category,
+  const onShare = async () => {
+    if (!product) return;
+    try {
+      await Share.share({
+        message: `Check out this product: ${product.name} on KiranaConnect!`,
+        url: `exp://u.expo.dev/update/4f057863-42e8-4e08-9ad5-a46e1fac9913`,
       });
-      showToast('Added to wishlist');
+    } catch (error) {
+      console.error('Error sharing:', error);
     }
   };
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" />
-        <Text>Loading product...</Text>
-      </View>
+      <SafeAreaView style={styles.center}>
+        <ActivityIndicator size="large" color={theme.colors.primary[600]} />
+        <Text style={styles.loadingText}>Loading Product...</Text>
+      </SafeAreaView>
     );
   }
 
   if (error) {
     return (
-      <View style={styles.centered}>
-        <Text style={{ color: 'red' }}>{error}</Text>
-      </View>
+      <SafeAreaView style={styles.center}>
+        <Text style={styles.errorText}>{error}</Text>
+      </SafeAreaView>
     );
   }
 
   if (!product) {
     return (
-      <View style={styles.centered}>
-        <Text>Product not found.</Text>
-      </View>
+      <SafeAreaView style={styles.center}>
+        <Text style={styles.errorText}>Product not found.</Text>
+      </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: 'white' }}>
+    <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
       <ScrollView>
-        <View style={styles.container}>
-          {/* Main content grid */}
-          <View style={styles.gridContainer}>
-            {/* Left Column: Image Gallery & Actions */}
-            <View style={styles.leftColumn}>
-              <View style={styles.galleryContainer}>
-                <View style={styles.thumbnailsColumn}>
-                  {product.images.map((img, index) => (
-                    <TouchableOpacity
-                      key={index}
-                      onPress={() => setSelectedImage(img)}
-                    >
-                      <Image
-                        source={{ uri: img }}
-                        style={[
-                          styles.thumbnail,
-                          selectedImage === img && styles.selectedThumbnail,
-                        ]}
-                      />
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                <View style={styles.mainImageContainer}>
-                  <Image
-                    source={{ uri: selectedImage }}
-                    style={styles.mainImage}
-                    resizeMode="contain"
-                  />
-                </View>
-              </View>
+        <View style={styles.imageGallery}>
+          <Image source={{ uri: selectedImage }} style={styles.mainImage} />
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.thumbnailContainer}>
+            {product.images.map((img, index) => (
+              <TouchableOpacity key={index} onPress={() => setSelectedImage(img)}>
+                <Image
+                  source={{ uri: img }}
+                  style={[styles.thumbnail, selectedImage === img && styles.selectedThumbnail]}
+                />
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
 
-              <View style={styles.actionsContainer}>
-                <Button
-                  onPress={handleAddToCart}
-                  style={styles.addToCartButton}
-                >
-                  <ShoppingCart
-                    color="white"
-                    size={20}
-                    style={{ marginRight: 8 }}
-                  />
-                  <Text style={{ color: 'white', fontWeight: 'bold' }}>
-                    Add To Cart
-                  </Text>
-                </Button>
-                <Button
-                  variant="outline"
-                  onPress={handleWishlistToggle}
-                  style={styles.wishlistButton}
-                >
-                  <Heart
-                    size={20}
-                    style={{ marginRight: 8 }}
-                    color={isInWishlist(product._id) ? 'red' : 'black'}
-                    fill={isInWishlist(product._id) ? 'red' : 'none'}
-                  />
-                  <Text>{isInWishlist(product._id) ? 'Saved' : 'Save'}</Text>
-                </Button>
-              </View>
-            </View>
-
-            {/* Right Column: Information */}
-            <View style={styles.rightColumn}>
-              <View style={styles.infoContainer}>
-                <Text style={styles.productName}>{product.name}</Text>
-                <Text style={styles.productUnit}>{product.unit}</Text>
-                <Text style={styles.productPrice}>
-                  {typeof product.price === 'number'
-                    ? `₹${product.price.toFixed(2)}`
-                    : 'Price not available'}
-                </Text>
-                {product.description && (
-                  <Text style={styles.productDescription}>
-                    {product.description}
-                  </Text>
-                )}
-
-                <View style={styles.infoBox}>
-                  <Text style={styles.infoBoxTitle}>Information</Text>
-                  <InfoRow
-                    label="Nutrition Information"
-                    value={product.nutritionInfo}
-                  />
-                  <InfoRow
-                    label="Customer Care Details"
-                    value={product.customerCare}
-                  />
-                  <InfoRow
-                    label="Refund Policy"
-                    value={product.refundPolicy}
-                  />
-                  <InfoRow label="Seller Name" value={product.sellerName} />
-                  <InfoRow
-                    label="Seller Address"
-                    value={product.sellerAddress}
-                  />
-                  <InfoRow
-                    label="Seller License No."
-                    value={product.sellerLicense}
-                  />
-                </View>
-              </View>
-            </View>
+        <View style={styles.detailsContainer}>
+          <View style={styles.header}>
+            <Text variant="h4" style={styles.productName}>{product.name}</Text>
+            <TouchableOpacity onPress={onShare}>
+              <Share2 size={24} color={theme.colors.gray[500]} />
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.productUnit}>{product.unit}</Text>
+          <Text style={styles.productPrice}>₹{product.price.toFixed(2)}</Text>
+          
+          <View style={styles.storeInfo}>
+            <Star size={16} color={theme.colors.yellow[500]} fill={theme.colors.yellow[500]} />
+            <Text style={styles.storeName}>{product.storeName}</Text>
           </View>
 
-          {/* Similar Products */}
-          {similarProducts.length > 0 && (
-            <View style={styles.similarProductsContainer}>
-              <Text style={styles.similarProductsTitle}>Similar Products</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {similarProducts.map(p => (
-                  <TouchableOpacity
-                    key={p._id}
-                    style={styles.similarProductCard}
-                    onPress={() =>
-                      router.replace(`/products/${p._id}` as any)
-                    }
-                  >
-                    <Image
-                      source={{ uri: p.image }}
-                      style={styles.similarProductImage}
-                      resizeMode="contain"
-                    />
-                    <Text style={styles.similarProductName} numberOfLines={2}>
-                      {p.name}
-                    </Text>
-                    <Text style={styles.similarProductPrice}>₹{p.price}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          )}
+          {product.description && <Text style={styles.description}>{product.description}</Text>}
+
+          <View style={styles.infoSection}>
+            <InfoRow label="Nutrition Information" value={product.nutritionInfo} />
+            <InfoRow label="Customer Care" value={product.customerCare} />
+            <InfoRow label="Refund Policy" value={product.refundPolicy} />
+            <InfoRow label="Seller" value={product.sellerName} />
+            <InfoRow label="Seller Address" value={product.sellerAddress} />
+          </View>
         </View>
+
+        {similarProducts.length > 0 && (
+          <View style={styles.similarSection}>
+            <Text variant="h6" style={styles.similarTitle}>Similar Products</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {similarProducts.map(p => (
+                <Link key={p._id} href={{ pathname: '/(app)/products/[productId]', params: { productId: p._id } }} asChild>
+                  <TouchableOpacity style={styles.similarCard}>
+                      <Image source={{ uri: p.image }} style={styles.similarImage} />
+                      <NativeText style={styles.similarName} numberOfLines={2}>{p.name}</NativeText>
+                      <Text style={styles.similarPrice}>₹{p.price.toFixed(2)}</Text>
+                  </TouchableOpacity>
+                </Link>
+              ))}
+            </ScrollView>
+          </View>
+        )}
       </ScrollView>
-      {toastMessage && (
+
+      <View style={styles.bottomBar}>
+        <Button variant="outline" onPress={handleWishlistToggle} style={styles.wishlistButton}>
+          <Heart size={22} color={isInWishlist(product._id) ? theme.colors.red[500] : theme.colors.gray[600]} fill={isInWishlist(product._id) ? theme.colors.red[500] : 'none'} />
+        </Button>
+        <Button onPress={handleAddToCart} style={styles.cartButton}>
+          <ShoppingCart size={22} color="white" style={{ marginRight: 8 }}/>
+          <Text style={styles.cartButtonText}>Add to Cart</Text>
+        </Button>
+      </View>
+
+       {toastMessage && (
         <View style={styles.toastContainer}>
           <Text style={styles.toastText}>{toastMessage}</Text>
         </View>
@@ -353,102 +301,45 @@ export default function ProductDetailPage() {
 const InfoRow = ({ label, value }: { label: string; value?: string }) => {
   if (!value) return null;
   return (
-    <View style={styles.infoRow}>
-      <Text style={styles.infoRowLabel}>{label}</Text>
-      <Text style={styles.infoRowValue}>{value}</Text>
-    </View>
+      <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>{label}</Text>
+          <Text style={styles.infoValue}>{value}</Text>
+      </View>
   );
 };
 
 const styles = StyleSheet.create({
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  container: { padding: 16 },
-  gridContainer: {
-    flexDirection: 'row',
-    gap: 24,
-  },
-  leftColumn: {
-    flex: 1,
-  },
-  rightColumn: {
-    flex: 1,
-  },
-  galleryContainer: { flexDirection: 'row', gap: 16, minHeight: 300 },
-  thumbnailsColumn: { flexDirection: 'column', gap: 16 },
-  thumbnail: {
-    width: 64,
-    height: 64,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
-  },
-  selectedThumbnail: { borderColor: '#3B82F6' },
-  mainImageContainer: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
-    padding: 8,
-  },
-  mainImage: { width: '100%', height: '100%' },
-  actionsContainer: {
-    flexDirection: 'row',
-    gap: 16,
-    marginTop: 16,
-  },
-  addToCartButton: { flex: 1, backgroundColor: '#0ea5e9', borderRadius: 8 },
-  wishlistButton: { flexBasis: 120 },
-  infoContainer: { gap: 8 },
-  productName: { fontSize: 28, fontWeight: 'bold' },
-  productUnit: { fontSize: 16, color: '#6B7280' },
-  productPrice: { fontSize: 28, fontWeight: 'bold' },
-  productDescription: { fontSize: 16, color: '#374151', lineHeight: 24 },
-  infoBox: {
-    marginTop: 16,
-    backgroundColor: '#F9FAFB',
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  infoBoxTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 16 },
-  infoRow: {
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    marginBottom: 12,
-  },
-  infoRowLabel: { fontWeight: '600', color: '#6B7280', marginBottom: 4 },
-  infoRowValue: { color: '#1F2937' },
-  similarProductsContainer: { marginTop: 24, paddingLeft: 16 },
-  similarProductsTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 12 },
-  similarProductCard: {
-    width: 150,
-    marginRight: 16,
-    padding: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    backgroundColor: 'white',
-  },
-  similarProductImage: { width: '100%', height: 100, marginBottom: 8 },
-  similarProductName: { fontWeight: '600', textAlign: 'center' },
-  similarProductPrice: {
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginTop: 4,
-  },
-  toastContainer: {
-    position: 'absolute',
-    bottom: 30,
-    left: 20,
-    right: 20,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    borderRadius: 20,
-    padding: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  toastText: {
-    color: 'white',
-  },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText: { marginTop: 16, fontSize: 18, color: theme.colors.gray[600] },
+  errorText: { fontSize: 18, color: theme.colors.red[500], textAlign: 'center', padding: 16 },
+  imageGallery: { backgroundColor: theme.colors.gray[100] },
+  mainImage: { width: '100%', height: 350, resizeMode: 'contain' },
+  thumbnailContainer: { padding: 16 },
+  thumbnail: { width: 60, height: 60, borderRadius: 8, marginRight: 12, borderWidth: 2, borderColor: 'transparent' },
+  selectedThumbnail: { borderColor: theme.colors.primary[500] },
+  detailsContainer: { padding: 16 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  productName: { flex: 1, fontWeight: 'bold' },
+  productUnit: { fontSize: 16, color: theme.colors.gray[500], marginTop: 4 },
+  productPrice: { fontSize: 28, fontWeight: 'bold', color: theme.colors.gray[800], marginVertical: 12 },
+  storeInfo: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, backgroundColor: theme.colors.gray[50], borderRadius: 8, alignSelf: 'flex-start' },
+  storeName: { fontWeight: '500' },
+  description: { fontSize: 16, color: theme.colors.gray[600], lineHeight: 24, marginVertical: 16 },
+  infoSection: { marginTop: 16, borderTopWidth: 1, borderTopColor: theme.colors.gray[200] },
+  infoRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.gray[200] },
+  infoLabel: { fontSize: 15, color: theme.colors.gray[600], fontWeight: '500' },
+  infoValue: { fontSize: 15, color: theme.colors.gray[800], flex: 1, textAlign: 'right' },
+  similarSection: { padding: 16, backgroundColor: theme.colors.gray[50], borderTopWidth: 8, borderColor: theme.colors.gray[100] },
+  similarTitle: { fontWeight: 'bold', marginBottom: 12 },
+  similarCard: { width: 140, marginRight: 16, backgroundColor: 'white', borderRadius: 8, padding: 8, borderWidth: 1, borderColor: theme.colors.gray[200] },
+  similarImage: { width: '100%', height: 100, resizeMode: 'contain', marginBottom: 8 },
+  similarName: { fontSize: 14, fontWeight: '500' },
+  similarPrice: { fontSize: 14, fontWeight: 'bold', marginTop: 4 },
+  bottomBar: { flexDirection: 'row', padding: 16, gap: 16, borderTopWidth: 1, borderColor: theme.colors.gray[200], backgroundColor: 'white' },
+  wishlistButton: { paddingHorizontal: 20 },
+  cartButton: { flex: 1 },
+  cartButtonText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
+  toastContainer: { position: 'absolute', bottom: 100, left: 20, right: 20, backgroundColor: 'rgba(0,0,0,0.8)', borderRadius: 20, padding: 16, alignItems: 'center' },
+  toastText: { color: 'white', fontWeight: 'bold' },
 }); 

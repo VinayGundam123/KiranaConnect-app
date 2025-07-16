@@ -32,7 +32,7 @@ export function StoreCard({ store, onPress }: StoreCardProps) {
         </View>
         
         <View style={styles.content}>
-          <Text variant="h6" style={styles.name}>{store.name}</Text>
+          <Text variant="h4" style={styles.name}>{store.name}</Text>
           <Text style={styles.description} numberOfLines={1}>
             {store.description}
           </Text>
@@ -74,79 +74,88 @@ export function StoreCard({ store, onPress }: StoreCardProps) {
 const styles = StyleSheet.create({
   card: {
     overflow: 'hidden',
-    marginBottom: 16,
+    marginBottom: 12, // Reduced from 16
+    maxWidth: 280,
+    minWidth: 240,
+    alignSelf: 'center',
   },
   image: {
     width: '100%',
-    height: 150,
+    height: 120,
+    resizeMode: 'cover',
   },
   ratingContainer: {
     position: 'absolute',
-    top: 8,
-    right: 8,
+    top: 6, // Reduced from 8
+    right: 6, // Reduced from 8
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 16,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
+    borderRadius: 12, // Reduced from 16
+    paddingVertical: 3, // Reduced from 4
+    paddingHorizontal: 6, // Reduced from 8
   },
   ratingText: {
-    marginLeft: 4,
+    marginLeft: 3, // Reduced from 4
     fontWeight: '600',
-    fontSize: 14,
+    fontSize: 13, // Reduced from 14
   },
   content: {
-    padding: 12,
+    padding: 8, // Reduced from 12
   },
   name: {
-    marginBottom: 4,
+    marginBottom: 2, // Reduced from 4
+    flexShrink: 1,
+    fontSize: 15, // Reduced from 16
+    fontWeight: '600',
   },
   description: {
     color: '#6B7280',
-    fontSize: 14,
-    marginBottom: 8,
+    fontSize: 12, // Reduced from 13
+    marginBottom: 6, // Reduced from 8
+    flexShrink: 1,
   },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 6, // Reduced from 8
+    flexWrap: 'wrap',
   },
   infoItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: 12, // Reduced from 16
   },
   infoText: {
-    marginLeft: 4,
+    marginLeft: 3, // Reduced from 4
     color: '#6B7280',
-    fontSize: 12,
+    fontSize: 11, // Reduced from 12
   },
   categoriesContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 4,
-    marginBottom: 8,
+    gap: 3, // Reduced from 4
+    marginBottom: 6, // Reduced from 8
   },
   categoryChip: {
     backgroundColor: '#F3F4F6',
-    borderRadius: 16,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
+    borderRadius: 12, // Reduced from 16
+    paddingVertical: 3, // Reduced from 4
+    paddingHorizontal: 8, // Reduced from 10
   },
   categoryText: {
-    fontSize: 12,
+    fontSize: 11, // Reduced from 12
     color: '#374151',
   },
   offerContainer: {
     backgroundColor: '#E0F2F1',
-    borderRadius: 16,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
+    borderRadius: 12, // Reduced from 16
+    paddingVertical: 3, // Reduced from 4
+    paddingHorizontal: 8, // Reduced from 10
     alignSelf: 'flex-start',
   },
   offerText: {
-    fontSize: 12,
+    fontSize: 11, // Reduced from 12
     color: '#0D9488',
     fontWeight: '600',
   },

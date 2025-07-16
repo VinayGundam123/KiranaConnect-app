@@ -99,7 +99,7 @@ export const buyerAPI = {
     api.get(`/buyer/stores/${storeId}`),
   
   // Products  
-  getProducts: (params?: { category?: string; limit?: number; sortBy?: string }) =>
+  getProducts: (params?: { category?: string; limit?: number; sortBy?: string; search?: string }) =>
     api.get('/buyer/products', { params }),
   
   getProduct: (productId: string) =>

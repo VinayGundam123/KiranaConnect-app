@@ -3,6 +3,7 @@ import React, { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from '../components/ui/safe-area-view';
 import { Text } from '../components/ui/text';
+import { isAuthenticated } from '../lib/auth';
 import { theme } from '../lib/theme';
 
 export default function Index() {
@@ -11,21 +12,28 @@ export default function Index() {
   useEffect(() => {
     // Simulate checking auth state
     const checkAuthState = async () => {
+      console.log('Starting authentication check...');
       try {
         // Add your auth check logic here
         // For now, we'll simulate and redirect to onboarding/home
         await new Promise(resolve => setTimeout(resolve, 1000));
         
         // Check if user is authenticated
-        const isAuthenticated = false; // Replace with actual auth check
+        console.log('Calling isAuthenticated...');
+        const userIsAuthenticated = await isAuthenticated(); // Replace with actual auth check
+        console.log('isAuthenticated result:', userIsAuthenticated);
         
-        if (isAuthenticated) {
+        if (userIsAuthenticated) {
+          console.log('User is authenticated, redirecting to /(app)');
           router.replace('/(app)');
         } else {
+          console.log('User is not authenticated, redirecting to /home');
           router.replace('/home');
         }
       } catch (error) {
         // Handle error, maybe redirect to error page
+        console.error('Error during authentication check:', error);
+        console.log('Redirecting to /home due to error.');
         router.replace('/home');
       }
     };

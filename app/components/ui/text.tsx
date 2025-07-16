@@ -1,37 +1,25 @@
 import { cva, type VariantProps } from 'class-variance-authority';
-import type { TextProps as RNTextProps } from 'react-native';
-import { Text as RNText } from 'react-native';
-import { theme } from '../../../lib/theme'; // Assuming theme file location
+import * as React from 'react';
+import { Text as NativeText, TextProps as NativeTextProps } from 'react-native';
 
-const textVariantsConfig = {
-  h1: { fontSize: theme.fontSize['4xl'], fontWeight: 'bold' },
-  h2: { fontSize: theme.fontSize['3xl'], fontWeight: 'bold' },
-  h3: { fontSize: theme.fontSize['2xl'], fontWeight: 'bold' },
-  h4: { fontSize: theme.fontSize['xl'], fontWeight: 'bold' },
-  h5: { fontSize: theme.fontSize.lg, fontWeight: 'bold' },
-  h6: { fontSize: theme.fontSize.base, fontWeight: 'bold' },
-  body: { fontSize: theme.fontSize.base },
-  small: { fontSize: theme.fontSize.sm },
+import { theme } from '../../../lib/theme';
+
+const textVariantStyles = {
+  h1: { fontSize: theme.fontSize['4xl'], fontWeight: '800' as const },
+  h2: { fontSize: theme.fontSize['3xl'], fontWeight: '700' as const },
+  h3: { fontSize: theme.fontSize['2xl'], fontWeight: '600' as const },
+  h4: { fontSize: theme.fontSize['xl'], fontWeight: '600' as const },
+  body: { fontSize: theme.fontSize.base, lineHeight: 24 },
+  muted: { fontSize: theme.fontSize.sm, color: theme.colors.gray[500] },
+  p: { fontSize: theme.fontSize.base, lineHeight: 28 },
 };
 
-export interface TextProps extends RNTextProps, VariantProps<typeof textVariants> {
-  variant?: keyof typeof textVariantsConfig;
-  color?: string; // Allow passing color as a prop
-  center?: boolean;
-  numberOfLines?: number; // Add this line
-}
+interface TextProps extends NativeTextProps, VariantProps<typeof textVariants> {}
 
-const textVariants = cva('text-base', {
+const textVariants = cva('text-foreground', {
   variants: {
     variant: {
-      h1: 'text-4xl font-bold',
-      h2: 'text-3xl font-bold',
-      h3: 'text-2xl font-bold',
-      h4: 'text-xl font-bold',
-      h5: 'text-lg font-bold',
-      h6: 'text-base font-bold',
-      body: 'text-base',
-      small: 'text-sm',
+      h1: '', h2: '', h3: '', h4: '', body: '', muted: '', p: ''
     },
   },
   defaultVariants: {
@@ -40,23 +28,19 @@ const textVariants = cva('text-base', {
 });
 
 
-export function Text({
-  style,
-  variant = 'body',
-  color,
-  center,
-  numberOfLines, // Add this line
-  ...props
-}: TextProps) {
-  const variantStyle = textVariantsConfig[variant] || textVariantsConfig.body;
-  const passedStyles = Array.isArray(style) ? Object.assign({}, ...style) : style;
+const Text = React.forwardRef<NativeText, TextProps>(
+  ({ className, variant, style, ...props }, ref) => {
+    const variantStyle = textVariantStyles[variant || 'body'];
+    
+    return (
+      <NativeText
+        ref={ref}
+        style={[variantStyle, style]}
+        {...props}
+      />
+    );
+  }
+);
+Text.displayName = 'Text';
 
-  const combinedStyles = {
-    ...variantStyle,
-    color,
-    textAlign: center ? 'center' : undefined,
-    ...passedStyles,
-  };
-
-  return <RNText style={combinedStyles} numberOfLines={numberOfLines} {...props} />;
-} 
+export { Text, textVariants };

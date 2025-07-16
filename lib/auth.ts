@@ -169,9 +169,18 @@ class AuthManager {
           localStorage.removeItem('buyerId'); // Clear other role
         }
         console.log(`${role}Id saved to localStorage:`, userId);
-      } else {
-        // For React Native, save full session object
+      }
+      
+      // For React Native, save both the full session and the simple buyerId for compatibility
+      if (Platform.OS !== 'web') {
         await StorageManager.setItem(SESSION_KEY, JSON.stringify(session));
+        if (role === 'buyer') {
+          await StorageManager.setItem('buyerId', userId);
+          console.log('buyerId saved to AsyncStorage for native:', userId);
+        } else {
+          // If you have a similar use case for sellerId, you can add it here
+          // await StorageManager.setItem('sellerId', userId);
+        }
       }
       
       this.notify();
@@ -194,9 +203,14 @@ class AuthManager {
       if (Platform.OS === 'web' && typeof window !== 'undefined') {
         localStorage.removeItem('buyerId');
         localStorage.removeItem('sellerId');
-      } else {
-        // For React Native, clear AsyncStorage
+      }
+      
+      // For React Native, clear AsyncStorage
+      if (Platform.OS !== 'web') {
         await StorageManager.removeItem(SESSION_KEY);
+        await StorageManager.removeItem('buyerId'); // Also remove buyerId
+        await StorageManager.removeItem('sellerId'); // And sellerId just in case
+        console.log('Cleared session and IDs from AsyncStorage for native');
       }
       
       this.notify();

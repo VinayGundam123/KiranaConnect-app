@@ -1,21 +1,64 @@
 import axios from 'axios';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, CreditCard, MapPin, Truck } from 'lucide-react-native';
+import { CreditCard, MapPin, Truck } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Animated,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { getCurrentSession } from '../../lib/auth';
-import { Button } from '../components/ui/button';
+import { useCart } from '../../lib/cart';
 import { SafeAreaView } from '../components/ui/safe-area-view';
-import { useCart } from './_layout';
+
+// Custom Toast Component
+const Toast = ({ visible, message, type, onHide }: {
+  visible: boolean;
+  message: string;
+  type: 'success' | 'error';
+  onHide: () => void;
+}) => {
+  const [fadeAnim] = React.useState(new Animated.Value(0));
+
+  React.useEffect(() => {
+    if (visible) {
+      Animated.sequence([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.delay(3000),
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        onHide();
+      });
+    }
+  }, [visible]);
+
+  if (!visible) return null;
+
+  return (
+    <Animated.View style={[
+      styles.toastContainer,
+      { opacity: fadeAnim },
+      type === 'success' ? styles.successToast : styles.errorToast
+    ]}>
+      <Text style={styles.toastText}>
+        {type === 'success' ? '✅ ' : '❌ '}{message}
+      </Text>
+    </Animated.View>
+  );
+};
 
 interface BillingAddress {
   fullName: string;
@@ -35,6 +78,7 @@ export default function BillingScreen() {
   const params = useLocalSearchParams();
 
   const [placingOrder, setPlacingOrder] = useState(false);
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'success' as 'success' | 'error' });
   const [billingAddress, setBillingAddress] = useState<BillingAddress>({
     fullName: '',
     phone: '',
@@ -51,6 +95,14 @@ export default function BillingScreen() {
   const totalDiscount = parseFloat(params.totalDiscount as string);
   const finalTotal = Math.floor(subtotal + deliveryFee - totalDiscount);
 
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ visible: true, message, type });
+  };
+
+  const hideToast = () => {
+    setToast({ visible: false, message: '', type: 'success' });
+  };
+
   const handleInputChange = (field: keyof BillingAddress, value: string) => {
     setBillingAddress((prev) => ({ ...prev, [field]: value }));
   };
@@ -58,10 +110,25 @@ export default function BillingScreen() {
   const validateForm = (): boolean => {
     for (const [key, value] of Object.entries(billingAddress)) {
       if (key !== 'landmark' && !value.trim()) {
-        Alert.alert('Validation Error', `Please fill in your ${key}.`);
+        showToast(`Please fill in your ${key}`, 'error');
         return false;
       }
     }
+    
+    // Validate phone number
+    const phoneRegex = /^[6-9]\d{9}$/;
+    if (!phoneRegex.test(billingAddress.phone)) {
+      showToast('Please enter a valid 10-digit phone number', 'error');
+      return false;
+    }
+
+    // Validate pincode
+    const pincodeRegex = /^[1-9][0-9]{5}$/;
+    if (!pincodeRegex.test(billingAddress.pincode)) {
+      showToast('Please enter a valid 6-digit pincode', 'error');
+      return false;
+    }
+
     return true;
   };
 
@@ -71,7 +138,10 @@ export default function BillingScreen() {
     setPlacingOrder(true);
     try {
       const session = await getCurrentSession();
-      if (!session?.user?._id) throw new Error('You must be logged in.');
+      if (!session?.user?._id) {
+        showToast('Please log in to place order', 'error');
+        return;
+      }
 
       const orderData = {
         items: cartItems.map(item => ({
@@ -102,14 +172,32 @@ export default function BillingScreen() {
 
       if (orderResponse.data.success) {
         await clearCart();
-        Alert.alert('Order Placed!', 'Your order has been placed successfully.', [
-          { text: 'OK', onPress: () => router.replace('/(app)/home') },
-        ]);
+        showToast('Order placed successfully! 🎉', 'success');
+        
+        // Navigate to orders page after a short delay to show the toast
+        setTimeout(() => {
+          router.push('/orders');
+        }, 1500);
       } else {
-        throw new Error(orderResponse.data.message || 'Failed to place order.');
+        showToast(orderResponse.data.message || 'Failed to place order', 'error');
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to place order. Please try again.');
+      console.error('❌ Order placement error:', error);
+      
+      let errorMessage = 'Failed to place order. Please try again.';
+      
+      if (error.response) {
+        // Server responded with error
+        errorMessage = error.response.data?.message || `Server error: ${error.response.status}`;
+      } else if (error.request) {
+        // Network error
+        errorMessage = 'Network error. Please check your connection.';
+      } else {
+        // Other error
+        errorMessage = error.message || 'Something went wrong.';
+      }
+      
+      showToast(errorMessage, 'error');
     } finally {
       setPlacingOrder(false);
     }
@@ -117,15 +205,12 @@ export default function BillingScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <ArrowLeft size={24} color="black" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Billing Details</Text>
-        <View style={{ width: 24 }} />
-      </View>
-
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
+      {/* Scrollable Content */}
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContainer}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Billing Address Form */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
@@ -177,32 +262,49 @@ export default function BillingScreen() {
             <Text style={styles.totalText}>₹{finalTotal.toFixed(2)}</Text>
           </View>
         </View>
-
-        <Button onPress={handlePlaceOrder} disabled={placingOrder} style={styles.placeOrderButton}>
-          {placingOrder ? (
-            <ActivityIndicator color="white" />
-          ) : (
-            <Text style={styles.placeOrderButtonText}>Confirm Order</Text>
-          )}
-        </Button>
       </ScrollView>
+
+      {/* Sticky Bottom Button */}
+      <View style={styles.stickyButtonContainer}>
+        <TouchableOpacity
+          style={[styles.orderButton, placingOrder && styles.disabledButton]}
+          onPress={handlePlaceOrder}
+          disabled={placingOrder}
+          activeOpacity={0.8}
+        >
+          {placingOrder ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator color="white" size="small" style={styles.loadingIcon} />
+              <Text style={styles.orderButtonText}>Processing...</Text>
+            </View>
+          ) : (
+            <View style={styles.buttonContent}>
+              <Text style={styles.orderButtonIcon}>🛒</Text>
+              <Text style={styles.orderButtonText}>Confirm Order • ₹{finalTotal}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      <Toast
+        visible={toast.visible}
+        message={toast.message}
+        type={toast.type}
+        onHide={hideToast}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F9FAFB' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+  scrollView: {
+    flex: 1,
   },
-  headerTitle: { fontSize: 20, fontWeight: 'bold' },
-  scrollContainer: { padding: 16 },
+  scrollContainer: { 
+    padding: 16,
+    paddingBottom: 100, // Extra padding to account for bottom button
+  },
   card: {
     backgroundColor: 'white',
     borderRadius: 12,
@@ -261,13 +363,98 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
-  placeOrderButton: {
-    marginTop: 16,
-    paddingVertical: 12,
+  stickyButtonContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    paddingBottom: 28,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: -2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 5,
   },
-  placeOrderButtonText: {
+  orderButton: {
+    width: '100%',
+    height: 56,
+    backgroundColor: '#4F46E5', // Primary blue background
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#4F46E5',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    borderWidth: 0,
+  },
+  disabledButton: {
+    backgroundColor: '#9CA3AF',
+    opacity: 0.8,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingIcon: {
+    marginRight: 8,
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  orderButtonIcon: {
+    fontSize: 20,
+    marginRight: 8,
+  },
+  orderButtonText: {
     color: 'white',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  toastContainer: {
+    position: 'absolute',
+    bottom: 120, // Position above the bottom button
+    left: 20,
+    right: 20,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    zIndex: 1000,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  successToast: {
+    backgroundColor: '#10B981',
+  },
+  errorToast: {
+    backgroundColor: '#EF4444',
+  },
+  toastText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 }); 

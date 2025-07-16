@@ -1,308 +1,133 @@
-import axios from 'axios';
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter, useSegments } from 'expo-router';
 import {
-  Home,
-  Search,
-  ShoppingCart,
-  Store,
-  User,
+    ArrowLeft,
+    Bell,
+    Heart,
+    Home,
+    Search,
+    ShoppingCart,
+    User,
 } from 'lucide-react-native';
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-} from 'react';
-import { authManager, getCurrentSession } from '../../lib/auth';
+import React from 'react';
+import {
+    Image,
+    Text as NativeText,
+    StyleSheet,
+    TouchableOpacity,
+    View
+} from 'react-native';
+import { Text } from '../../components/ui/text';
+import { useCart } from '../../lib/cart';
+import { HeaderProvider, useHeader } from '../../lib/header-context';
 import { theme } from '../../lib/theme';
-import { WishlistProvider } from '../_layout';
+import { useWishlist, WishlistProvider } from '../_layout';
 
-// --- Cart Context Implementation ---
+// Custom Header Component
+function CustomHeader() {
+  const router = useRouter();
+  const segments = useSegments();
+  const { items: cartItems } = useCart();
+  const wishlistContext = useWishlist();
+  const { title: dynamicTitle } = useHeader(); // Use title from context
+  const wishlistItems = wishlistContext?.items || [];
+  
+  // Determine if we're on the home page
+  const isHomePage = segments.length === 1 && segments[0] === '(app)';
+  
+  // Get page title based on current segment
+  const getPageTitle = () => {
+    const lastSegment = segments[segments.length - 1];
+    if (lastSegment === 'search') return 'Search Products';
+    if (lastSegment === 'cart') return 'Shopping Cart';
+    if (lastSegment === 'wishlist') return 'My Wishlist';
+    if (lastSegment === 'profile') return 'Profile';
+    if (lastSegment === 'notifications') return 'Notifications';
+    if (lastSegment === 'stores') return 'All Stores';
+    if (segments.some(segment => segment.includes('stores') && segment !== 'stores')) return 'Store Details';
+    if (lastSegment === 'popular-items') return 'Popular Items';
+    if (segments.some(segment => segment === 'products')) return 'Product Details';
+    if (lastSegment === 'billing') return 'Checkout';
+    return 'KiranaConnect';
+  };
 
-// Interfaces
-export interface CartItem {
-  itemId: string;
-  name: string;
-  price: number;
-  quantity: number;
-  image?: string;
-  unit?: string;
-  storeId: string;
-  storeName: string;
-  category: string;
-  addedAt?: number;
-}
-
-export interface AppliedCoupon {
-  code: string;
-  discountPercentage: number;
-  discountAmount: number;
-  appliedAt: Date;
-}
-
-interface CartContextType {
-  items: CartItem[];
-  total: number;
-  loading: boolean;
-  appliedCoupon: AppliedCoupon | null;
-  addToCart: (item: Omit<CartItem, 'quantity' | 'addedAt'>) => Promise<void>;
-  removeFromCart: (itemId: string) => Promise<void>;
-  updateQuantity: (itemId: string, quantity: number) => Promise<void>;
-  clearCart: () => Promise<void>;
-  syncWithBackend: () => Promise<void>;
-  applyCoupon: (couponCode: string) => Promise<any>;
-  removeCoupon: () => void;
-}
-
-// Context Creation
-const CartContext = createContext<CartContextType | undefined>(undefined);
-
-const API_BASE_URL = 'https://vigorously-more-impala.ngrok-free.app';
-const NGROK_HEADER = { 'ngrok-skip-browser-warning': 'true' };
-
-// Cart Provider Component
-const CartProvider: React.FC<{ children: React.ReactNode }> = ({
-  children,
-}) => {
-  const [items, setItems] = useState<CartItem[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(
-    null
-  );
-
-  const syncWithBackend = useCallback(async () => {
-    setLoading(true);
-    const session = await getCurrentSession();
-    if (!session?.user?._id) {
-      setItems([]);
-      setTotal(0);
-      setLoading(false);
-      return;
-    }
-    try {
-      const { data } = await axios.get(
-        `${API_BASE_URL}/buyer/cart/${session.user._id}`,
-        { headers: NGROK_HEADER }
-      );
-      if (data && Array.isArray(data)) {
-        const backendItems: CartItem[] = data.map((item: any) => ({
-          ...item,
-          addedAt: new Date(item.addedAt).getTime(),
-        }));
-        const newTotal = backendItems.reduce(
-          (sum, item) => sum + item.price * item.quantity,
-          0
-        );
-        setItems(backendItems);
-        setTotal(newTotal);
-      }
-    } catch (error) {
-      console.error('Failed to sync cart with backend:', error);
-      setItems([]);
-      setTotal(0);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // This effect runs once on mount and then listens for auth changes
-  useEffect(() => {
-    const unsubscribe = authManager.subscribe((session) => {
-      console.log('Auth state changed, re-syncing cart...');
-      syncWithBackend();
-    });
-
-    // Initial sync
-    syncWithBackend();
-
-    return () => {
-      unsubscribe(); // Clean up the subscription
-    };
-  }, [syncWithBackend]);
-
-  const addToCart = useCallback(
-    async (item: any, quantity: number = 1) => {
-      setLoading(true);
-      const session = await getCurrentSession();
-      if (!session?.user?._id) {
-        console.error('No session found, cannot add to cart');
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const payload = {
-          itemId: item._id || item.itemId,
-          name: item.name,
-          price: item.price,
-          quantity: quantity,
-          image: item.image_url || item.image,
-          unit: item.unit,
-          storeName: item.storeName,
-          storeId: item.storeId,
-          category: item.category,
-        };
-        
-        console.log('Sending to cart:', payload);
-
-        const response = await axios.post(
-          `https://vigorously-more-impala.ngrok-free.app/buyer/cart/${session.user._id}`,
-          payload,
-          {
-            headers: { 'ngrok-skip-browser-warning': 'true' },
-          }
-        );
-
-        if (response.data.cart) {
-          const { items: newItems, totalPrice: newTotal } = response.data.cart;
-          setItems(newItems);
-          setTotal(newTotal);
-        }
-      } catch (error: any) {
-        console.error(
-          'Failed to add item to cart:',
-          error.response?.data || error.message
-        );
-      } finally {
-        setLoading(false);
-      }
-    },
-    []
-  );
-
-  const removeFromCart = useCallback(
-    async (itemId: string) => {
-      const session = await getCurrentSession();
-      if (!session?.user?._id) throw new Error('You must be logged in.');
-
-      try {
-        await axios.delete(
-          `${API_BASE_URL}/buyer/cart/${session.user._id}/remove`,
-          {
-            data: { itemId },
-            headers: NGROK_HEADER,
-          }
-        );
-        await syncWithBackend();
-      } catch (error) {
-        console.error('Failed to remove item from cart:', error);
-        throw error;
-      }
-    },
-    [syncWithBackend]
-  );
-
-  const updateQuantity = useCallback(
-    async (itemId: string, newQuantity: number) => {
-      const session = await getCurrentSession();
-      if (!session?.user?._id) throw new Error('You must be logged in.');
-
-      if (newQuantity <= 0) {
-        await removeFromCart(itemId);
-        return;
-      }
-
-      try {
-        await axios.put(
-          `${API_BASE_URL}/buyer/cart/${session.user._id}/quantity`,
-          { itemId, newQuantity },
-          { headers: NGROK_HEADER }
-        );
-        await syncWithBackend();
-      } catch (error) {
-        console.error('Failed to update quantity:', error);
-        throw error;
-      }
-    },
-    [syncWithBackend, removeFromCart]
-  );
-
-  const clearCart = useCallback(async () => {
-    const session = await getCurrentSession();
-    if (!session?.user?._id) throw new Error('You must be logged in.');
-
-    try {
-      await axios.delete(
-        `${API_BASE_URL}/buyer/cart/${session.user._id}/clear`,
-        { headers: NGROK_HEADER }
-      );
-      await syncWithBackend();
-    } catch (error) {
-      console.error('Failed to clear cart:', error);
-      throw error;
-    }
-  }, [syncWithBackend]);
-
-  const applyCoupon = useCallback(async (couponCode: string) => {
-    const session = await getCurrentSession();
-    if (!session?.user?._id) throw new Error('You must be logged in.');
-
-    try {
-      const { data } = await axios.post(
-        `${API_BASE_URL}/buyer/cart/${session.user._id}/coupons/validate`,
-        { couponCode: couponCode.trim().toUpperCase() },
-        { headers: NGROK_HEADER }
-      );
-
-      if (data.valid) {
-        setAppliedCoupon({
-          code: data.coupon.code,
-          discountPercentage: data.coupon.discountPercentage,
-          discountAmount: data.coupon.discountAmount,
-          appliedAt: new Date(),
-        });
-      }
-      return data;
-    } catch (error) {
-      console.error('Failed to apply coupon:', error);
-      setAppliedCoupon(null);
-      throw error;
-    }
-  }, []);
-
-  const removeCoupon = useCallback(() => {
-    setAppliedCoupon(null);
-  }, []);
+  const pageTitle = dynamicTitle || getPageTitle();
+  const cartItemCount = cartItems?.length || 0;
+  const wishlistItemCount = wishlistItems?.length || 0;
 
   return (
-    <CartContext.Provider
-      value={{
-        items,
-        total,
-        loading,
-        appliedCoupon,
-        addToCart,
-        removeFromCart,
-        updateQuantity,
-        clearCart,
-        syncWithBackend, // Already here, just confirming
-        applyCoupon,
-        removeCoupon,
-      }}
-    >
-      {children}
-    </CartContext.Provider>
+    <View style={styles.headerContainer}>
+      <View style={styles.headerContent}>
+        {/* Left Side */}
+        <View style={styles.headerLeft}>
+          {!isHomePage ? (
+            <>
+              <TouchableOpacity 
+                onPress={() => router.back()} 
+                style={styles.backButton}
+              >
+                <ArrowLeft size={20} color={theme.colors.gray[700]} />
+              </TouchableOpacity>
+              <NativeText style={[styles.pageTitle, {fontWeight: '600', fontSize: 16}]} numberOfLines={1}>
+                {pageTitle}
+              </NativeText>
+            </>
+          ) : (
+            <View style={styles.brandContainer}>
+              <Image
+                source={require('../../assets/images/logo.png')}
+                style={styles.logo}
+              />
+              <Text variant="h4" style={styles.brandText}>
+                KiranaConnect
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* Right Side */}
+        <View style={styles.headerRight}>
+          {/* Wishlist Icon */}
+          <TouchableOpacity 
+            onPress={() => router.push('/(app)/wishlist')}
+            style={styles.iconButton}
+          >
+            <Heart size={20} color={theme.colors.gray[600]} />
+            {wishlistItemCount > 0 && (
+              <View style={styles.badge}>
+                <NativeText style={styles.badgeText}>
+                  {wishlistItemCount > 99 ? '99+' : wishlistItemCount}
+                </NativeText>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          {/* Cart Icon */}
+          <TouchableOpacity 
+            onPress={() => router.push('/(app)/cart')}
+            style={styles.iconButton}
+          >
+            <ShoppingCart size={20} color={theme.colors.gray[600]} />
+            {cartItemCount > 0 && (
+              <View style={styles.badge}>
+                <NativeText style={styles.badgeText}>
+                  {cartItemCount > 99 ? '99+' : cartItemCount}
+                </NativeText>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
   );
-};
-
-// Custom Hook
-export const useCart = () => {
-  const context = useContext(CartContext);
-  if (context === undefined) {
-    throw new Error('useCart must be used within a CartProvider');
-  }
-  return context;
-};
-
-// --- End Cart Context ---
+}
 
 export default function AppLayout() {
   return (
     <WishlistProvider>
-      <CartProvider>
-        <Tabs
+      <HeaderProvider>
+        <View style={{ flex: 1 }}>
+          <CustomHeader />
+          <Tabs
           screenOptions={{
             tabBarActiveTintColor: theme.colors.primary[600],
             tabBarInactiveTintColor: theme.colors.gray[400],
@@ -310,27 +135,20 @@ export default function AppLayout() {
               backgroundColor: theme.colors.white,
               borderTopWidth: 1,
               borderTopColor: theme.colors.gray[200],
+              height: 60,
+              paddingBottom: 5,
+              paddingTop: 5,
             },
+            headerShown: false,
           }}
         >
           <Tabs.Screen
             name="index"
             options={{
-              title: 'Dashboard',
+              title: 'Home',
               tabBarIcon: ({ color, size }) => (
                 <Home color={color} size={size} />
               ),
-              headerShown: false,
-            }}
-          />
-          <Tabs.Screen
-            name="stores"
-            options={{
-              title: 'Stores',
-              tabBarIcon: ({ color, size }) => (
-                <Store color={color} size={size} />
-              ),
-              headerShown: false,
             }}
           />
           <Tabs.Screen
@@ -340,17 +158,15 @@ export default function AppLayout() {
               tabBarIcon: ({ color, size }) => (
                 <Search color={color} size={size} />
               ),
-              headerShown: false,
             }}
           />
           <Tabs.Screen
-            name="cart"
+            name="notifications"
             options={{
-              title: 'Cart',
+              title: 'Notifications',
               tabBarIcon: ({ color, size }) => (
-                <ShoppingCart color={color} size={size} />
+                <Bell color={color} size={size} />
               ),
-              headerShown: false,
             }}
           />
           <Tabs.Screen
@@ -360,23 +176,100 @@ export default function AppLayout() {
               tabBarIcon: ({ color, size }) => (
                 <User color={color} size={size} />
               ),
-              headerShown: false,
             }}
           />
-          <Tabs.Screen
-            name="home"
-            options={{
-              href: null, // Hide from tabs
-            }}
-          />
-          <Tabs.Screen
-            name="popular-items"
-            options={{
-              href: null, // Hide from tabs
-            }}
-          />
+          
+          {/* Hidden screens - accessible via navigation but not in tab bar */}
+          <Tabs.Screen name="home" options={{ href: null }} />
+          <Tabs.Screen name="stores/index" options={{ href: null }} />
+          <Tabs.Screen name="stores/[storeId]" options={{ href: null }} />
+          <Tabs.Screen name="popular-items/index" options={{ href: null }} />
+          <Tabs.Screen name="products/[productId]" options={{ href: null }} />
+          <Tabs.Screen name="billing" options={{ href: null }} />
+          <Tabs.Screen name="orders" options={{ href: null }} />
+          <Tabs.Screen name="auth" options={{ href: null }} />
+          <Tabs.Screen name="cart" options={{ href: null }} />
+          <Tabs.Screen name="wishlist" options={{ href: null }} />
+          <Tabs.Screen name="baskets" options={{ href: null }} />
+          <Tabs.Screen name="help-support" options={{ href: null }} />
+          <Tabs.Screen name="category/[categoryName]" options={{ href: null }} />
+          <Tabs.Screen name="categories/index" options={{ href: null }} />
         </Tabs>
-      </CartProvider>
+      </View>
+      </HeaderProvider>
     </WishlistProvider>
   );
-} 
+}
+
+const styles = StyleSheet.create({
+  headerContainer: {
+    backgroundColor: theme.colors.white,
+    borderBottomWidth: 0.5,
+    borderBottomColor: theme.colors.gray[200],
+    paddingTop: 40, // Status bar height
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    height: 40,
+  },
+  headerLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  backButton: {
+    padding: 4,
+    marginRight: 6,
+    marginLeft: -4,
+  },
+  pageTitle: {
+    color: theme.colors.gray[800],
+    fontWeight: '600',
+    fontSize: 16,
+    flexShrink: 1, // Allow text to shrink if needed
+  },
+  brandContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  logo: {
+    width: 20,
+    height: 20,
+    marginRight: 6,
+  },
+  brandText: {
+    color: theme.colors.primary[600],
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  iconButton: {
+    padding: 6,
+    position: 'relative',
+  },
+  badge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: theme.colors.red[500],
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 3,
+  },
+  badgeText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+}); 

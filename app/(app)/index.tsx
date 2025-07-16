@@ -8,18 +8,18 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-import { StoreCard } from '../../components/dashboard/StoreCard';
-import { ApiMonitor } from '../../components/ui/api-monitor';
+import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
 import { SafeAreaView } from '../../components/ui/safe-area-view';
 import { Text } from '../../components/ui/text';
 import { getCurrentSession, isAuthenticated } from '../../lib/auth';
+import { useCart } from '../../lib/cart';
 import { useProducts, useStores } from '../../lib/hooks';
 import { theme } from '../../lib/theme';
 import { useWishlist } from '../_layout';
+import { AnimatedStoreCarousel } from '../components/ui/animated-store-carousel';
 import { ProductCard } from '../components/ui/product-card';
-import { useCart } from './_layout';
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -27,16 +27,16 @@ export default function DashboardScreen() {
   const [authLoading, setAuthLoading] = useState(true);
   const [isUserAuthenticated, setIsUserAuthenticated] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-
+  
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
-  const { addToCart, syncWithBackend: syncCart } = useCart(); // Get real addToCart
+  const { addToCart, syncWithBackend: syncCart } = useCart();
 
   // Only fetch data when user is authenticated
   const shouldFetchData = isUserAuthenticated;
   
   // Fetch recent stores (limit to 2 for dashboard) - only when authenticated
   const { data: storesResponse, loading: storesLoading } = useStores(
-    { limit: 2, sortBy: 'rating' },
+    { limit: 3, sortBy: 'rating' },
     shouldFetchData
   );
   
@@ -51,6 +51,17 @@ export default function DashboardScreen() {
   
   // Extract products array from API response  
   const products = productsResponse?.products || [];
+
+  // Categories data (matching web version)
+  const categories = [
+    { name: "Groceries", icon: "🥑", id: "groceries" },
+    { name: "Vegetables", icon: "🥕", id: "vegetables" },
+    { name: "Fruits", icon: "🍎", id: "fruits" },
+    { name: "Dairy", icon: "🥛", id: "dairy" },
+    { name: "Snacks", icon: "🍪", id: "snacks" },
+    { name: "Beverages", icon: "🥤", id: "beverages" },
+    { name: "Personal Care", icon: "🧴", id: "personal-care" }
+  ];
 
   const showToast = (message: string) => {
     setToastMessage(message);
@@ -101,6 +112,15 @@ export default function DashboardScreen() {
     } catch (error: any) {
       showToast(error.message || 'Failed to update wishlist');
     }
+  };
+
+  const handleCategoryPress = (category: { name: string; id: string }) => {
+    console.log('Category pressed:', category.name);
+    // Navigate to category items page using href
+    router.push({
+      pathname: '/category/[categoryName]' as any,
+      params: { categoryName: category.name }
+    });
   };
 
   // Check auth on screen focus (when navigating back from login)
@@ -217,7 +237,6 @@ export default function DashboardScreen() {
   if (authLoading) {
     return (
       <SafeAreaView style={styles.container}>
-        <ApiMonitor />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#4F46E5" />
           <Text style={styles.loadingText}>Loading...</Text>
@@ -228,7 +247,6 @@ export default function DashboardScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ApiMonitor />
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Welcome Section */}
         <View style={styles.welcomeSection}>
@@ -240,21 +258,34 @@ export default function DashboardScreen() {
           </Text>
         </View>
 
-        {/* Quick Actions */}
+        {/* Quick Basket Creation */}
         <Card style={styles.section}>
-          <Text variant="h6" style={styles.sectionTitle}>Quick Actions</Text>
-          <View style={styles.actionsGrid}>
-            {quickActions.map((action) => (
-              <TouchableOpacity key={action.id} onPress={action.onPress}>
-                <Card style={styles.actionCard}>
-                  <View style={[styles.actionIcon, { backgroundColor: `${action.color}20` }]}>
-                    <action.icon color={action.color} size={24} />
-                  </View>
-                  <Text variant="body" style={styles.actionTitle}>{action.title}</Text>
-                  <Text style={styles.actionDescription}>{action.description}</Text>
-                </Card>
-              </TouchableOpacity>
-            ))}
+          <TouchableOpacity 
+            onPress={() => {
+              console.log('🔧 Quick Basket Creation header pressed - navigating to baskets page');
+              router.push('/baskets');
+              showToast('Opening basket management...');
+            }}
+            style={styles.sectionHeader}
+          >
+            <Text variant="h6" style={styles.sectionTitle}>Quick Basket Creation</Text>
+            <Text style={styles.expandIcon}>→</Text>
+          </TouchableOpacity>
+          
+          <View style={styles.quickBasketContent}>
+            <Text style={styles.basketDescription}>
+              Create and manage your shopping baskets with detailed product information, quantities, and company preferences.
+            </Text>
+            <Button 
+              onPress={() => {
+                console.log('🔧 Get Started button pressed - navigating to baskets page');
+                router.push('/baskets');
+              }} 
+              style={styles.getStartedButton}
+            >
+              <ShoppingBag size={16} color="white" />
+              <Text style={styles.getStartedButtonText}>Get Started</Text>
+            </Button>
           </View>
         </Card>
 
@@ -277,22 +308,27 @@ export default function DashboardScreen() {
                 Debug Session
               </Button>
               <Button 
-                onPress={testAPI} 
+                onPress={() => {
+                  console.log('🔧 Testing direct navigation to baskets');
+                  router.push('/baskets');
+                }} 
                 variant="outline"
                 style={styles.retryButton}
               >
-                Test API
+                Test Baskets
               </Button>
             </View>
           </Card>
         ) : (
           <>
-            {/* Recent Stores */}
-            <Card style={styles.section}>
+            {/* Recent Stores - Animated Carousel */}
+            <View style={styles.carouselSection}>
               <View style={styles.sectionHeader}>
-                <Text variant="h6" style={styles.sectionTitle}>Recent Stores</Text>
-                <Button 
-                  variant="outline" 
+                <Text variant="h6" style={styles.sectionTitle}>
+                  Recent Stores
+                </Text>
+                <Button
+                  variant="outline"
                   size="sm"
                   onPress={() => {
                     console.log('Stores "View All" button pressed on mobile');
@@ -302,39 +338,26 @@ export default function DashboardScreen() {
                   View All
                 </Button>
               </View>
-              
+
               {storesLoading ? (
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator color="#4F46E5" />
                   <Text style={styles.loadingText}>Loading stores...</Text>
                 </View>
               ) : stores && stores.length > 0 ? (
-                <View style={styles.storesContainer}>
-                  {stores.slice(0, 2).map((store: any) => (
-                    <StoreCard
-                      key={store._id}
-                      store={{
-                        ...store,
-                        description: store.storeAddress || 'No address provided',
-                        imageUrl:
-                          store.storeImgUrl ||
-                          'https://images.unsplash.com/photo-1584008604?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80',
-                        deliveryTime: '30-45 min',
-                        categories: store.categories || [],
-                      }}
-                      onPress={() =>
-                        router.push({
-                          pathname: '/stores/[storeId]',
-                          params: { storeId: store._id },
-                        })
-                      }
-                    />
-                  ))}
-                </View>
+                <AnimatedStoreCarousel
+                  stores={stores}
+                  onStorePress={(storeId: string) =>
+                    router.push({
+                      pathname: '/stores/[storeId]' as any,
+                      params: { storeId },
+                    })
+                  }
+                />
               ) : (
                 <Text style={styles.emptyText}>No stores available</Text>
               )}
-            </Card>
+            </View>
 
             {/* Popular Products */}
             <Card style={styles.section}>
@@ -365,6 +388,8 @@ export default function DashboardScreen() {
                            product={{...product, image: product.image_url}}
                            onAddToCart={() => handleAddToCart(product)}
                            onWishlistToggle={() => handleWishlistToggle(product)}
+                           onPress={() => router.push(`/(app)/products/${product._id}`)}
+                           isInWishlist={isInWishlist(product._id)}
                         />
                       </View>
                     ))}
@@ -373,6 +398,45 @@ export default function DashboardScreen() {
               ) : (
                 <Text style={styles.emptyText}>No products available</Text>
               )}
+            </Card>
+
+            {/* Categories Section */}
+            <Card style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text variant="h6" style={styles.sectionTitle}>
+                  Shop by Category
+                </Text>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onPress={() => router.push('/categories' as any)}
+                >
+                  View All
+                </Button>
+              </View>
+
+              <View style={styles.categoriesContainer}>
+                {categories.map((category, index) => (
+                  <Animated.View
+                    key={category.id}
+                    entering={FadeInDown.delay(index * 100).springify()}
+                  >
+                    <TouchableOpacity
+                      style={styles.categoryCard}
+                      onPress={() => handleCategoryPress(category)}
+                      activeOpacity={0.7}
+                    >
+                      <Animated.View 
+                        style={styles.categoryIconContainer}
+                        entering={FadeInRight.delay(index * 150)}
+                      >
+                        <Text style={styles.categoryIcon}>{category.icon}</Text>
+                      </Animated.View>
+                      <Text style={styles.categoryName}>{category.name}</Text>
+                    </TouchableOpacity>
+                  </Animated.View>
+                ))}
+              </View>
             </Card>
           </>
         )}
@@ -393,10 +457,12 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: theme.spacing.md,
+    padding: 8, // Increased from theme.spacing.md for better spacing
+    paddingTop: 20, // Extra top padding
   },
   welcomeSection: {
     marginBottom: theme.spacing.lg,
+    paddingHorizontal: 4, // Added horizontal padding
   },
   welcomeTitle: {
     marginBottom: theme.spacing.sm,
@@ -406,15 +472,33 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontSize: theme.fontSize.base,
   },
+  carouselSection: {
+    backgroundColor: '#eef2ff',
+    paddingVertical: 16, // Reduced padding for better proportion
+    paddingHorizontal: 8,
+    borderRadius: 16,
+    marginBottom: 24,
+    marginHorizontal: 8, // Increased from 4 to pull away from edges more
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
   section: {
     marginBottom: theme.spacing.lg,
     padding: theme.spacing.lg,
+    marginHorizontal: 4, // Added horizontal margin
+    borderRadius: 12, // Added border radius for consistency
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: theme.spacing.md,
+    paddingHorizontal: 16, // Reduced from theme.spacing.lg for better spacing
+    paddingVertical: 8, // Increased from 4
+    marginHorizontal: 4, // Added margin to pull away from edges
   },
   sectionTitle: {
     color: '#111827',
@@ -527,5 +611,168 @@ const styles = StyleSheet.create({
   toastText: {
     color: 'white',
     fontWeight: 'bold',
+  },
+  categoriesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+  },
+  categoryCard: {
+    width: '30%', // 3 categories per row with gaps
+    minWidth: 100,
+    alignItems: 'center',
+    padding: theme.spacing.md,
+    backgroundColor: '#f8fafc',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  categoryIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#ffffff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: theme.spacing.sm,
+    shadowColor: '#4F46E5',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  categoryIcon: {
+    fontSize: 28,
+  },
+  categoryName: {
+    fontSize: theme.fontSize.sm,
+    fontWeight: '500',
+    color: '#374151',
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  // New styles for Quick Basket
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  quickBasketContent: {
+    paddingTop: theme.spacing.md,
+  },
+  addItemForm: {
+    marginBottom: theme.spacing.md,
+  },
+  itemInput: {
+    marginBottom: theme.spacing.sm,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#f9fafb',
+  },
+  addItemButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: theme.spacing.sm,
+    borderRadius: 12,
+    backgroundColor: '#4F46E5',
+  },
+  addItemButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    marginLeft: theme.spacing.xs,
+  },
+  itemsHeader: {
+    fontSize: theme.fontSize.base,
+    fontWeight: '500',
+    color: '#111827',
+    marginBottom: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  basketItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 12,
+    marginBottom: theme.spacing.sm,
+  },
+  itemInfo: {
+    flex: 1,
+  },
+  itemName: {
+    fontSize: theme.fontSize.base,
+    fontWeight: '500',
+    color: '#111827',
+    marginBottom: theme.spacing.xs,
+  },
+  itemDescription: {
+    fontSize: theme.fontSize.sm,
+    color: '#6b7280',
+    marginTop: theme.spacing.xs,
+  },
+  itemControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  quantityButton: {
+    padding: theme.spacing.xs,
+  },
+  quantity: {
+    fontSize: theme.fontSize.base,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginHorizontal: theme.spacing.sm,
+  },
+  removeButton: {
+    padding: theme.spacing.xs,
+  },
+  processBasketButton: {
+    marginTop: theme.spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: theme.spacing.sm,
+    borderRadius: 12,
+    backgroundColor: '#4F46E5',
+  },
+  processBasketText: {
+    color: 'white',
+    fontWeight: 'bold',
+    marginLeft: theme.spacing.xs,
+  },
+  expandIcon: {
+    fontSize: 20,
+    color: '#6b7280',
+  },
+  basketDescription: {
+    fontSize: theme.fontSize.sm,
+    color: '#6b7280',
+    marginBottom: theme.spacing.md,
+    textAlign: 'center',
+  },
+  getStartedButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: theme.spacing.sm,
+    borderRadius: 12,
+    backgroundColor: '#4F46E5',
+  },
+  getStartedButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    marginLeft: theme.spacing.xs,
   },
 }); 

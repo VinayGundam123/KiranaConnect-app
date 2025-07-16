@@ -1,80 +1,14 @@
 import { useRouter } from 'expo-router';
-import { LucideIcon, Store, User } from 'lucide-react-native';
-import { useState } from 'react';
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { BackendStatus } from '../components/ui/backend-status';
-import { Button } from '../components/ui/button';
-import { healthAPI } from '../lib/api';
+import { LucideIcon } from 'lucide-react-native';
+import React from 'react';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function AuthScreen() {
   const router = useRouter();
-  const [role, setRole] = useState<'buyer' | 'seller'>('buyer');
-
-  const handleContinue = () => {
-    router.push({ pathname: '/auth/login', params: { role } });
-  };
-
-  const testBackendConnection = async () => {
-    try {
-      Alert.alert('Testing...', 'Checking backend connection');
-      await healthAPI.check();
-      Alert.alert('Success!', 'Backend is running and accessible');
-    } catch (error: any) {
-      Alert.alert(
-        'Backend Error', 
-        `Cannot connect to backend server at localhost:5000\n\nError: ${error.message}\n\nMake sure your backend server is running!`
-      );
-    }
-  };
-
-  return (
-    <View style={styles.container}>
-      <BackendStatus />
-      <View style={styles.logoContainer}>
-        <Store color="#FFFFFF" size={32} />
-      </View>
-      <Text style={styles.title}>KiranaConnect</Text>
-      
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Choose your role</Text>
-        <Text style={styles.cardSubtitle}>
-          Select how you'll be using KiranaConnect
-        </Text>
-
-        {/* Role Selection Buttons */}
-        <View style={{width: '100%'}}>
-          <RoleButton
-            text="I'm a Buyer"
-            subtext="Shop from local stores"
-            icon={User}
-            isSelected={role === 'buyer'}
-            onPress={() => setRole('buyer')}
-          />
-          <RoleButton
-            text="I'm a Seller"
-            subtext="List your store and manage orders"
-            icon={Store}
-            isSelected={role === 'seller'}
-            onPress={() => setRole('seller')}
-          />
-        </View>
-
-        <Button size="lg" onPress={handleContinue} style={{marginTop: 16}}>
-          Continue
-        </Button>
-
-        {/* Test Backend Button */}
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onPress={testBackendConnection} 
-          style={{marginTop: 8, width: '100%'}}
-        >
-          Test Backend Connection
-        </Button>
-      </View>
-    </View>
-  );
+  React.useEffect(() => {
+    router.replace({ pathname: '/auth/login', params: { role: 'buyer' } });
+  }, [router]);
+  return null;
 }
 
 interface RoleButtonProps {

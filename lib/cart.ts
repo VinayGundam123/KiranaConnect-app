@@ -1,194 +1,265 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
 import { Platform } from 'react-native';
+import { authManager, getCurrentSession } from './auth';
 
+// --- Interfaces (re-using from your context implementation) ---
 export interface CartItem {
-  id: string;
+  itemId: string;
   name: string;
   price: number;
   quantity: number;
-  image: string;
+  image?: string;
+  unit?: string;
   storeId: string;
   storeName: string;
   category: string;
-  description: string;
-  unit: string;
-  maxQuantity: number;
+  addedAt?: number;
 }
 
-export interface CartStore {
+export interface AppliedCoupon {
+  code: string;
+  discountPercentage: number;
+  discountAmount: number;
+  appliedAt: Date;
+}
+
+interface CartState {
   items: CartItem[];
-  isOpen: boolean;
-  addItem: (item: Omit<CartItem, 'quantity'> & { quantity?: number }) => Promise<void>;
-  removeItem: (id: string) => Promise<void>;
-  updateQuantity: (id: string, quantity: number) => Promise<void>;
-  clearCart: () => Promise<void>;
-  toggleCart: () => Promise<void>;
-  getTotalPrice: () => number;
-  getTotalItems: () => number;
-  getItemsByStore: () => Record<string, CartItem[]>;
+  total: number;
+  loading: boolean;
+  appliedCoupon: AppliedCoupon | null;
 }
 
-const CART_STORAGE_KEY = 'kirana-cart';
+// --- Module-Level State ---
+let state: CartState = {
+  items: [],
+  total: 0,
+  loading: true,
+  appliedCoupon: null,
+};
 
-// Simple cart state management without zustand
-class CartManager {
-  private items: CartItem[] = [];
-  private isOpen: boolean = false;
-  private listeners: Set<() => void> = new Set();
-  private initialized: boolean = false;
+// --- Listener System ---
+type Listener = (state: CartState) => void;
+const listeners: Set<Listener> = new Set();
 
-  constructor() {
-    // Don't initialize during SSR
-    if (Platform.OS !== 'web' || typeof window !== 'undefined') {
-      this.initialize();
-    }
+const notifyListeners = () => {
+  listeners.forEach((listener) => listener(state));
+};
+
+// --- API Configuration ---
+const API_BASE_URL = 'https://vigorously-more-impala.ngrok-free.app';
+const NGROK_HEADER = { 'ngrok-skip-browser-warning': 'true' };
+
+// --- State Mutators and Actions ---
+const setState = (newState: Partial<CartState>) => {
+  state = { ...state, ...newState };
+  notifyListeners();
+
+  // Prevent AsyncStorage calls on the server
+  if (Platform.OS === 'web' && typeof window === 'undefined') {
+    return;
   }
 
-  // Initialize the cart manager
-  private async initialize() {
-    if (this.initialized) return;
-    this.initialized = true;
-    await this.loadCartFromStorage();
+  // Persist only items and coupon, as total is derived and loading is transient
+  AsyncStorage.setItem('cart_items', JSON.stringify(state.items));
+  if (state.appliedCoupon) {
+    AsyncStorage.setItem('cart_coupon', JSON.stringify(state.appliedCoupon));
+  } else {
+    AsyncStorage.removeItem('cart_coupon');
+  }
+};
+
+export const syncWithBackend = async () => {
+  setState({ loading: true });
+  const session = await getCurrentSession();
+
+  if (!session?.user?._id) {
+    setState({ items: [], total: 0, loading: false });
+    return;
   }
 
-  // Subscribe to cart changes
-  subscribe(listener: () => void) {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  }
-
-  // Notify all listeners of changes
-  private notify() {
-    this.listeners.forEach(listener => listener());
-  }
-
-  // Load cart from storage
-  private async loadCartFromStorage() {
-    try {
-      if (Platform.OS === 'web' && typeof window === 'undefined') {
-        return; // Skip during SSR
-      }
-      const savedCart = await AsyncStorage.getItem(CART_STORAGE_KEY);
-      if (savedCart) {
-        this.items = JSON.parse(savedCart);
-        this.notify();
-      }
-    } catch (error) {
-      console.error('Error loading cart from storage:', error);
-    }
-  }
-
-  // Save cart to storage
-  private async saveCartToStorage() {
-    try {
-      if (Platform.OS === 'web' && typeof window === 'undefined') {
-        return; // Skip during SSR
-      }
-      await AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(this.items));
-    } catch (error) {
-      console.error('Error saving cart to storage:', error);
-    }
-  }
-
-  // Get current state
-  async getState(): Promise<CartStore> {
-    // Ensure initialization before returning state
-    if (!this.initialized) {
-      await this.initialize();
-    }
-    
-    return {
-      items: [...this.items],
-      isOpen: this.isOpen,
-      addItem: this.addItem.bind(this),
-      removeItem: this.removeItem.bind(this),
-      updateQuantity: this.updateQuantity.bind(this),
-      clearCart: this.clearCart.bind(this),
-      toggleCart: this.toggleCart.bind(this),
-      getTotalPrice: this.getTotalPrice.bind(this),
-      getTotalItems: this.getTotalItems.bind(this),
-      getItemsByStore: this.getItemsByStore.bind(this),
-    };
-  }
-
-  async addItem(newItem: Omit<CartItem, 'quantity'> & { quantity?: number }) {
-    await this.initialize();
-    
-    const existingItem = this.items.find(item => item.id === newItem.id);
-    
-    if (existingItem) {
-      const newQuantity = existingItem.quantity + (newItem.quantity || 1);
-      const maxQuantity = newItem.maxQuantity || 10;
-      existingItem.quantity = Math.min(newQuantity, maxQuantity);
+  try {
+    const { data } = await axios.get(
+      `${API_BASE_URL}/buyer/cart/${session.user._id}`,
+      { headers: NGROK_HEADER }
+    );
+    if (data && Array.isArray(data)) {
+      const backendItems: CartItem[] = data.map((item: any) => ({
+        ...item,
+        addedAt: new Date(item.addedAt).getTime(),
+      }));
+      const newTotal = backendItems.reduce(
+        (sum, item) => sum + item.price * item.quantity,
+        0
+      );
+      setState({ items: backendItems, total: newTotal, loading: false });
     } else {
-      const cartItem: CartItem = {
-        ...newItem,
-        quantity: newItem.quantity || 1,
-      };
-      this.items.push(cartItem);
+      setState({ items: [], total: 0, loading: false });
     }
-    
-    await this.saveCartToStorage();
-    this.notify();
+  } catch (error) {
+    console.error('Failed to sync cart with backend:', error);
+    setState({ items: [], total: 0, loading: false });
   }
+};
 
-  async removeItem(id: string) {
-    await this.initialize();
-    this.items = this.items.filter(item => item.id !== id);
-    await this.saveCartToStorage();
-    this.notify();
+export const addToCart = async (item: any, quantity: number = 1) => {
+  const session = await getCurrentSession();
+  if (!session?.user?._id) {
+    console.error('No session found, cannot add to cart');
+    return;
   }
-
-  async updateQuantity(id: string, quantity: number) {
-    await this.initialize();
-    
-    if (quantity <= 0) {
-      await this.removeItem(id);
-      return;
+  setState({ loading: true });
+  try {
+    const payload = {
+      itemId: item._id || item.itemId,
+      name: item.name,
+      price: item.price,
+      quantity: quantity,
+      image: item.image_url || item.image,
+      unit: item.unit,
+      storeName: item.storeName,
+      storeId: item.storeId,
+      category: item.category,
+    };
+    const { data } = await axios.post(
+      `${API_BASE_URL}/buyer/cart/${session.user._id}`,
+      payload,
+      { headers: NGROK_HEADER }
+    );
+    if (data.cart) {
+      const { items: newItems, totalPrice: newTotal } = data.cart;
+      setState({ items: newItems, total: newTotal, loading: false });
     }
-    
-    const item = this.items.find(item => item.id === id);
-    if (item) {
-      item.quantity = quantity;
-      await this.saveCartToStorage();
-      this.notify();
+  } catch (error: any) {
+    console.error('Failed to add item to cart:', error.response?.data || error.message);
+    setState({ loading: false }); // Revert loading state on error
+  }
+};
+
+export const removeFromCart = async (itemId: string) => {
+    const session = await getCurrentSession();
+    if (!session?.user?._id) throw new Error('You must be logged in.');
+
+    await axios.delete(
+        `${API_BASE_URL}/buyer/cart/${session.user._id}/remove`,
+        { data: { itemId }, headers: NGROK_HEADER }
+    );
+    await syncWithBackend();
+};
+
+export const updateQuantity = async (itemId: string, newQuantity: number) => {
+    const session = await getCurrentSession();
+    if (!session?.user?._id) throw new Error('You must be logged in.');
+
+    if (newQuantity <= 0) {
+        await removeFromCart(itemId);
+        return;
     }
-  }
 
-  async clearCart() {
-    await this.initialize();
-    this.items = [];
-    await this.saveCartToStorage();
-    this.notify();
-  }
+    await axios.put(
+        `${API_BASE_URL}/buyer/cart/${session.user._id}/quantity`,
+        { itemId, newQuantity },
+        { headers: NGROK_HEADER }
+    );
+    await syncWithBackend();
+};
 
-  async toggleCart() {
-    await this.initialize();
-    this.isOpen = !this.isOpen;
-    this.notify();
-  }
+export const clearCart = async () => {
+    const session = await getCurrentSession();
+    if (!session?.user?._id) throw new Error('You must be logged in.');
 
-  getTotalPrice(): number {
-    return this.items.reduce((total, item) => total + (item.price * item.quantity), 0);
-  }
+    await axios.delete(
+      `${API_BASE_URL}/buyer/cart/${session.user._id}/clear`,
+      { headers: NGROK_HEADER }
+    );
+    await syncWithBackend();
+};
 
-  getTotalItems(): number {
-    return this.items.reduce((total, item) => total + item.quantity, 0);
-  }
+export const applyCoupon = async (couponCode: string) => {
+    const session = await getCurrentSession();
+    if (!session?.user?._id) throw new Error('You must be logged in.');
 
-  getItemsByStore(): Record<string, CartItem[]> {
-    return this.items.reduce((acc, item) => {
-      if (!acc[item.storeId]) {
-        acc[item.storeId] = [];
-      }
-      acc[item.storeId].push(item);
-      return acc;
-    }, {} as Record<string, CartItem[]>);
+    const { data } = await axios.post(
+        `${API_BASE_URL}/buyer/cart/${session.user._id}/coupons/validate`,
+        { couponCode: couponCode.trim().toUpperCase() },
+        { headers: NGROK_HEADER }
+    );
+
+    if (data.valid) {
+        setState({
+            appliedCoupon: {
+                code: data.coupon.code,
+                discountPercentage: data.coupon.discountPercentage,
+                discountAmount: data.coupon.discountAmount,
+                appliedAt: new Date(),
+            }
+        });
+    }
+    return data;
+};
+
+export const removeCoupon = () => {
+    setState({ appliedCoupon: null });
+};
+
+
+// --- Initialization and Auth Sync ---
+const initialize = async () => {
+  try {
+    const savedItems = await AsyncStorage.getItem('cart_items');
+    const savedCoupon = await AsyncStorage.getItem('cart_coupon');
+    if (savedItems) {
+      const items = JSON.parse(savedItems);
+      const total = items.reduce((sum: number, item: CartItem) => sum + item.price * item.quantity, 0);
+      state = { ...state, items, total };
+    }
+    if (savedCoupon) {
+        state = { ...state, appliedCoupon: JSON.parse(savedCoupon) };
+    }
+  } catch (e) {
+    console.error("Failed to load cart from storage", e);
   }
+  notifyListeners();
+  syncWithBackend(); // Sync after loading from cache
+};
+
+// Only run initialization and subscriptions on the client side
+if (Platform.OS !== 'web' || typeof window !== 'undefined') {
+  authManager.subscribe((session) => {
+    console.log('Auth state changed, re-syncing cart...');
+    syncWithBackend();
+  });
+
+  initialize();
 }
 
-// Create a singleton cart manager
-export const cartManager = new CartManager();
+// --- Custom Hook ---
+import { useEffect, useState } from 'react';
 
-// Export a function to get the current cart state
-export const useCart = async () => await cartManager.getState(); 
+export const useCart = () => {
+  const [cartState, setCartState] = useState(state);
+
+  useEffect(() => {
+    const listener = (newState: CartState) => {
+      setCartState(newState);
+    };
+    listeners.add(listener);
+    // Initial sync of state for the component
+    listener(state); 
+    return () => {
+      listeners.delete(listener);
+    };
+  }, []);
+
+  return {
+    ...cartState,
+    addToCart,
+    removeFromCart,
+    updateQuantity,
+    clearCart,
+    syncWithBackend,
+    applyCoupon,
+    removeCoupon,
+  };
+}; 

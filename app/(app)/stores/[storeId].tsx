@@ -1,38 +1,45 @@
-import { Stack, useLocalSearchParams } from 'expo-router';
-import {
-  Clock,
-  MapPin,
-  Menu,
-  Star
-} from 'lucide-react-native';
-import React, { useCallback, useMemo, useState } from 'react';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { Clock, MapPin, Star, X } from 'lucide-react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
-  Image,
   ImageBackground,
+  ScrollView,
   StyleSheet,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
+import { useCart } from '../../../lib/cart';
+import { useHeader } from '../../../lib/header-context';
 import { useStore } from '../../../lib/hooks';
 import { useWishlist } from '../../_layout';
 import { Input } from '../../components/ui/input';
 import { ProductCard } from '../../components/ui/product-card';
-import { SafeAreaView } from '../../components/ui/safe-area-view';
 import { Text } from '../../components/ui/text';
-import { useCart } from '../_layout';
 
 export default function StoreDetailScreen() {
-  const router = useLocalSearchParams<{ storeId: string }>();
-  const { storeId } = router;
+  const params = useLocalSearchParams<{ storeId: string }>();
+  const { storeId } = params;
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(
+    null
+  );
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const { data: storeData, loading, error } = useStore(storeId as string);
   const { addToWishlist, isInWishlist, removeFromWishlist } = useWishlist();
   const { addToCart } = useCart();
+  const { setTitle } = useHeader();
+
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const showToast = (message: string) => {
     setToastMessage(message);
@@ -42,6 +49,18 @@ export default function StoreDetailScreen() {
   };
 
   const storeDetails = storeData?.store;
+
+  useEffect(() => {
+    if (storeDetails?.name) {
+      setTitle(`${storeDetails.name} Store`);
+    }
+
+    // Reset title on component unmount
+    return () => {
+      setTitle(null);
+    };
+  }, [storeDetails?.name, setTitle]);
+
   const inventory = storeDetails?.inventory || [];
 
   const categories = useMemo(() => {
@@ -53,14 +72,55 @@ export default function StoreDetailScreen() {
   const filteredItems = useMemo(() => {
     if (!inventory.length) return [];
     return inventory.filter((item: any) => {
-      const matchesSearch = item.name
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase());
+      // Enhanced search logic - search across multiple fields
+      const matchesSearch = debouncedSearchQuery === '' || 
+        item.name?.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+        item.description?.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+        item.category?.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+        item.tags?.some((tag: string) => tag.toLowerCase().includes(debouncedSearchQuery.toLowerCase()));
+      
       const matchesCategory =
         !selectedCategory || item.category === selectedCategory;
       return matchesSearch && matchesCategory;
     });
-  }, [inventory, searchQuery, selectedCategory]);
+  }, [inventory, debouncedSearchQuery, selectedCategory]);
+
+  // Enhanced empty state messaging
+  const getEmptyMessage = () => {
+    if (!inventory.length) {
+      return {
+        title: 'No items available',
+        subtitle: 'This store currently has no inventory.'
+      };
+    }
+    
+    if (debouncedSearchQuery && selectedCategory) {
+      return {
+        title: 'No items found',
+        subtitle: `No items found for "${debouncedSearchQuery}" in ${selectedCategory}`
+      };
+    } else if (debouncedSearchQuery) {
+      return {
+        title: 'No items found',
+        subtitle: `No items found for "${debouncedSearchQuery}"`
+      };
+    } else if (selectedCategory) {
+      return {
+        title: 'No items found',
+        subtitle: `No items found in ${selectedCategory}`
+      };
+    }
+    
+    return {
+      title: 'No items found',
+      subtitle: 'Try adjusting your search or filters.'
+    };
+  };
+
+  const clearSearch = useCallback(() => {
+    setSearchQuery('');
+    setDebouncedSearchQuery('');
+  }, []);
 
   const handleAddToCart = async (item: any) => {
     try {
@@ -96,9 +156,34 @@ export default function StoreDetailScreen() {
     }
   };
 
-  const renderHeader = useCallback(
-    () => (
-      <>
+  if (loading && !storeDetails) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" />
+        <Text>Loading store...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text>Error loading store. Please try again.</Text>
+      </View>
+    );
+  }
+
+  const emptyMessage = getEmptyMessage();
+
+  return (
+    <View style={styles.container}>
+      <Stack.Screen options={{ headerShown: false }} />
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={true}
+        bounces={true}
+      >
         {/* Store Header */}
         <ImageBackground
           source={{
@@ -132,12 +217,22 @@ export default function StoreDetailScreen() {
 
         {/* Search and Filters */}
         <View style={styles.filterContainer}>
-          <Input
-            placeholder="Search items in this store..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            style={styles.searchInput}
-          />
+          <View style={styles.searchContainer}>
+            <Input
+              placeholder="Search items, categories, descriptions..."
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              style={styles.searchInput}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity
+                onPress={clearSearch}
+                style={styles.clearButton}
+              >
+                <X size={20} color="#6B7280" />
+              </TouchableOpacity>
+            )}
+          </View>
           <View style={styles.categoryContainer}>
             {['All Categories', ...categories].map(item => {
               const isSelected =
@@ -167,98 +262,62 @@ export default function StoreDetailScreen() {
             })}
           </View>
         </View>
-      </>
-    ),
-    [
-      storeDetails,
-      searchQuery,
-      categories,
-      selectedCategory,
-      setSelectedCategory,
-      setSearchQuery,
-    ]
-  );
 
-  const renderInventoryItem = ({ item }: { item: any }) => {
-    const productForCard = {
-      ...item,
-      _id: item._id,
-      image: item.image_url,
-      storeName: storeDetails?.name,
-      storeId: storeDetails?._id,
-    };
+        {/* Products Grid */}
+        {filteredItems.length > 0 ? (
+          <View style={styles.productsContainer}>
+            {filteredItems.map((item: any, index: number) => {
+              const productForCard = {
+                ...item,
+                _id: item._id,
+                image: item.image_url,
+                storeName: storeDetails?.name,
+                storeId: storeDetails?._id,
+              };
 
-    return (
-      <View style={styles.itemContainer}>
-        <ProductCard
-          product={productForCard}
-          onAddToCart={() => handleAddToCart(item)}
-          onWishlistToggle={() => handleWishlistToggle(item)}
-        />
-      </View>
-    );
-  };
-
-  if (loading && !storeDetails) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" />
-        <Text>Loading store...</Text>
-      </View>
-    );
-  }
-
-  if (error) {
-    return (
-      <View style={styles.loadingContainer}>
-        <Text>Error loading store. Please try again.</Text>
-      </View>
-    );
-  }
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <Stack.Screen options={{ headerShown: false }} />
-      <View style={styles.newHeader}>
-        <View style={styles.headerLeft}>
-          <Image
-            source={require('../../../assets/images/logo.png')}
-            style={styles.logo}
-          />
-          <Text style={styles.headerTitle}>KiranaConnect</Text>
-        </View>
-        <TouchableOpacity onPress={() => console.log('Menu pressed')}>
-          <Menu size={24} color="black" />
-        </TouchableOpacity>
-      </View>
-      <FlatList
-        data={filteredItems}
-        keyExtractor={item => item._id}
-        ListHeaderComponent={renderHeader}
-        renderItem={renderInventoryItem}
-        numColumns={2}
-        ListEmptyComponent={
+              return (
+                <View key={item._id} style={styles.itemContainer}>
+                  <ProductCard
+                    product={productForCard}
+                    onAddToCart={() => handleAddToCart(item)}
+                    onWishlistToggle={() => handleWishlistToggle(item)}
+                    onPress={() => router.push(`/(app)/products/${item._id}`)}
+                    isInWishlist={isInWishlist(item._id)}
+                  />
+                </View>
+              );
+            })}
+          </View>
+        ) : (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyTitle}>No items found</Text>
+            <Text style={styles.emptyTitle}>{emptyMessage.title}</Text>
             <Text style={styles.emptySubtitle}>
-              Try adjusting your search or filters.
+              {emptyMessage.subtitle}
             </Text>
           </View>
-        }
-        contentContainerStyle={styles.listContent}
-        columnWrapperStyle={styles.listRow}
-      />
+        )}
+      </ScrollView>
+      
       {toastMessage && (
         <View style={styles.toastContainer}>
           <Text style={styles.toastText}>{toastMessage}</Text>
         </View>
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F9FAFB' },
+  container: { 
+    flex: 1, 
+    backgroundColor: '#F9FAFB',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -267,21 +326,12 @@ const styles = StyleSheet.create({
   headerImage: {
     height: 256,
     justifyContent: 'flex-end',
+    width: '100%',
   },
   headerOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'space-between',
-  },
-  headerTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    padding: 16,
-  },
-  backButton: {
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 20,
-    padding: 8,
   },
   headerTextContainer: {
     padding: 16,
@@ -304,33 +354,21 @@ const styles = StyleSheet.create({
   filterContainer: {
     padding: 16,
     backgroundColor: '#FFFFFF',
+    width: '100%',
   },
-  newHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  logo: {
-    width: 30,
-    height: 30,
-    marginRight: 8,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: 'black',
+  searchContainer: {
+    position: 'relative',
+    marginBottom: 16,
   },
   searchInput: {
-    marginBottom: 16,
+    paddingRight: 45, // Make room for clear button
+  },
+  clearButton: {
+    position: 'absolute',
+    right: 12,
+    top: '50%',
+    transform: [{ translateY: -10 }],
+    zIndex: 1,
   },
   categoryContainer: {
     flexDirection: 'row',
@@ -355,16 +393,15 @@ const styles = StyleSheet.create({
   categoryButtonTextSelected: {
     color: '#FFFFFF',
   },
-  listContent: {
+  productsContainer: {
+    paddingHorizontal: 8,
     paddingBottom: 16,
-  },
-  listRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
   },
   itemContainer: {
-    flex: 0.5,
-    paddingHorizontal: 4,
+    width: '48%',
     marginBottom: 16,
   },
   emptyContainer: {
@@ -378,6 +415,7 @@ const styles = StyleSheet.create({
   emptySubtitle: {
     color: '#6B7280',
     marginTop: 8,
+    textAlign: 'center',
   },
   toastContainer: {
     position: 'absolute',
